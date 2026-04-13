@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["opencode-original/packages/app/src/*"],
+      "@opencode-ai/ui": ["opencode-original/packages/ui/src/components/index.ts"],
+      "@opencode-ai/ui/*": ["opencode-original/packages/ui/src/components/*"],
+      "@opencode-ai/ui/context": ["opencode-original/packages/ui/src/context/index.ts"],
+      "@opencode-ai/ui/context/*": ["opencode-original/packages/ui/src/context/*"],
+      "@opencode-ai/ui/hooks": ["opencode-original/packages/ui/src/hooks/index.ts"],
+      "@opencode-ai/ui/i18n/*": ["opencode-original/packages/ui/src/i18n/*"],
+      "@opencode-ai/ui/pierre": ["opencode-original/packages/ui/src/pierre/index.ts"],
+      "@opencode-ai/ui/pierre/*": ["opencode-original/packages/ui/src/pierre/*"],
+      "@opencode-ai/ui/styles": ["opencode-original/packages/ui/src/styles/index.css"],
+      "@opencode-ai/ui/styles/tailwind": ["opencode-original/packages/ui/src/styles/tailwind/index.css"],
+      "@opencode-ai/ui/theme": ["opencode-original/packages/ui/src/theme/index.ts"],
+      "@opencode-ai/ui/theme/*": ["opencode-original/packages/ui/src/theme/*"],
+      "@opencode-ai/sdk": ["opencode-original/packages/sdk/js/src/index.ts"],
+      "@opencode-ai/sdk/client": ["opencode-original/packages/sdk/js/src/client.ts"],
+      "@opencode-ai/sdk/server": ["opencode-original/packages/sdk/js/src/server.ts"],
+      "@opencode-ai/sdk/v2": ["opencode-original/packages/sdk/js/src/v2/index.ts"],
+      "@opencode-ai/sdk/v2/*": ["opencode-original/packages/sdk/js/src/v2/*"],
+      "@opencode-ai/util/*": ["opencode-original/packages/util/src/*"]
+    },
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true
+  },
+  "include": [
+    "webview/src/**/*.ts",
+    "webview/src/**/*.tsx",
+    "webview/src/**/*.d.ts",
+    "src/webviewProtocol.ts",
+    "vite.config.mts"
+  ]
+}

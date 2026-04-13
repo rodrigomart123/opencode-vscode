@@ -1,0 +1,204 @@
+{
+  "name": "opencode-visual",
+  "displayName": "OpenCode Client for VS Code",
+  "description": "VS Code sidebar client for OpenCode sessions.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rodrigomart123/opencode-client-for-vs-code.git"
+  },
+  "homepage": "https://github.com/rodrigomart123/opencode-client-for-vs-code#readme",
+  "bugs": {
+    "url": "https://github.com/rodrigomart123/opencode-client-for-vs-code/issues"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:opencodeVisual.sidebar",
+    "onCommand:opencodeVisual.focus",
+    "onCommand:opencodeVisual.newSession",
+    "onCommand:opencodeVisual.restartServer",
+    "onCommand:opencodeVisual.refresh",
+    "onCommand:opencodeVisual.openSettings"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opencodeVisual",
+          "title": "OpenCode",
+          "icon": "media/opencode.svg"
+        }
+      ]
+    },
+    "views": {
+      "opencodeVisual": [
+        {
+          "type": "webview",
+          "id": "opencodeVisual.sidebar",
+          "name": "OpenCode",
+          "icon": "media/opencode.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "opencodeVisual.focus",
+        "title": "OpenCode: Focus Sidebar"
+      },
+      {
+        "command": "opencodeVisual.newSession",
+        "title": "OpenCode: New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "opencodeVisual.refresh",
+        "title": "OpenCode: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "opencodeVisual.openSettings",
+        "title": "OpenCode: Open Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "opencodeVisual.restartServer",
+        "title": "OpenCode: Restart Local Server"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "opencodeVisual.newSession",
+          "when": "view == opencodeVisual.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opencodeVisual.refresh",
+          "when": "view == opencodeVisual.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "opencodeVisual.openSettings",
+          "when": "view == opencodeVisual.sidebar",
+          "group": "navigation@9"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "opencodeVisual.focus"
+        },
+        {
+          "command": "opencodeVisual.newSession"
+        },
+        {
+          "command": "opencodeVisual.refresh"
+        },
+        {
+          "command": "opencodeVisual.openSettings"
+        },
+        {
+          "command": "opencodeVisual.restartServer"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenCode Client for VS Code",
+      "properties": {
+        "opencodeVisual.opencodePath": {
+          "type": "string",
+          "default": "opencode",
+          "description": "CLI command or absolute path used to launch the local OpenCode server."
+        },
+        "opencodeVisual.serverBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:4096",
+          "description": "Base URL for the OpenCode server. The extension will connect here and can auto-start a local server."
+        },
+        "opencodeVisual.autoStartServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start `opencode serve` if the configured server is not already running."
+        },
+        "opencodeVisual.debugServerLogs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stream local OpenCode server stdout/stderr into the OpenCode Visual output channel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build:webview && npm run build:extension",
+    "build:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=false --outfile=dist/extension.js",
+    "build:webview": "vite build",
+    "watch": "npm run watch:extension",
+    "watch:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=false --outfile=dist/extension.js --watch",
+    "watch:webview": "vite build --watch",
+    "check": "tsc -p . --noEmit && tsc -p tsconfig.webview.json --noEmit"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@tsconfig/node22": "^22.0.2",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.6.0",
+    "@types/vscode": "^1.96.0",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.4",
+    "vite-plugin-solid": "^2.11.10"
+  },
+  "dependencies": {
+    "@kobalte/core": "^0.13.11",
+    "@opencode-ai/sdk": "^1.3.17",
+    "@pierre/diffs": "^1.1.0-beta.18",
+    "@shikijs/transformers": "^3.9.2",
+    "@solid-primitives/active-element": "^2.1.3",
+    "@solid-primitives/audio": "^1.4.2",
+    "@solid-primitives/event-bus": "^1.1.2",
+    "@solid-primitives/event-listener": "^2.4.5",
+    "@solid-primitives/i18n": "^2.2.1",
+    "@solid-primitives/media": "^2.3.3",
+    "@solid-primitives/resize-observer": "^2.1.5",
+    "@solid-primitives/scroll": "^2.1.3",
+    "@solid-primitives/storage": "^4.3.3",
+    "@solid-primitives/timer": "^1.4.4",
+    "@solid-primitives/websocket": "^1.3.1",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.4",
+    "@tanstack/solid-query": "^5.91.4",
+    "@thisbeyond/solid-dnd": "^0.7.5",
+    "cross-spawn": "^7.0.6",
+    "diff": "^8.0.2",
+    "dompurify": "^3.3.1",
+    "effect": "^4.0.0-beta.43",
+    "fuzzysort": "^3.1.0",
+    "ghostty-web": "github:anomalyco/ghostty-web#main",
+    "katex": "^0.16.27",
+    "luxon": "^3.6.1",
+    "marked": "^17.0.1",
+    "marked-katex-extension": "^5.1.6",
+    "marked-shiki": "^1.2.1",
+    "morphdom": "^2.7.8",
+    "motion": "^12.34.5",
+    "motion-dom": "^12.34.3",
+    "motion-utils": "^12.29.2",
+    "remeda": "^2.26.0",
+    "remend": "^1.3.0",
+    "shiki": "^3.20.0",
+    "solid-js": "^1.9.10",
+    "solid-list": "^0.3.0",
+    "strip-ansi": "^7.1.2",
+    "tailwindcss": "^4.1.11",
+    "virtua": "^0.42.3",
+    "zod": "^4.1.8"
+  }
+}

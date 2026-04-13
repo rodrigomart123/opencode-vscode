@@ -1,0 +1,7 @@
+dist/*
+!dist/extension.js
+node_modules/
+*.vsix
+git_log.txt
+temp-*.tsx
+opencode-original/
