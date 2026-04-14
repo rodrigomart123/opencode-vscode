@@ -1,61 +1,28 @@
 # OpenCode VS Code
 
-OpenCode VS Code is a VS Code sidebar client for OpenCode.
+OpenCode VS Code brings OpenCode sessions into a native VS Code sidebar experience.
 
 Repository: `https://github.com/rodrigomart123/opencode-vscode`
 
-## Overview
+## Features
 
-- Runs OpenCode inside a VS Code webview sidebar
-- Uses the active VS Code workspace folder as the OpenCode working directory
-- Connects to an existing OpenCode server, with optional local server management
-- Supports starting new sessions, refreshing state, and opening settings from VS Code commands
-
-## Auto-start behavior
-
-Yes, OpenCode auto-start is enabled by default.
-
-- Setting: `opencodeVisual.autoStartServer`
-- Default value: `true`
-- When the configured server is unreachable, the extension automatically starts `opencode serve`
-
-If you disable it (`false`), the extension will only connect to an already running server.
+- OpenCode chat and session workflow directly in the Activity Bar sidebar
+- Uses the active workspace folder as the OpenCode working directory
+- Connects to existing OpenCode server, with optional auto-start local server
+- Preserves sidebar context while switching files in the same workspace
+- Quick commands for New Session, Refresh, Settings, and Restart Local Server
 
 ## Requirements
 
 - VS Code `1.96.0` or newer
-- OpenCode CLI installed (`opencode` on PATH), or configure `opencodeVisual.opencodePath`
-- Node.js `20+` and npm (only needed when building/packaging from source)
+- OpenCode CLI available as `opencode` in PATH, or set `opencodeVisual.opencodePath`
 
-## Install as a normal VS Code extension
+## Extension Settings
 
-1. Build and package VSIX:
-
-   ```bash
-   npm install
-   npm run build
-   npx @vscode/vsce package
-   ```
-
-2. Install VSIX in VS Code:
-   - Open Extensions view
-   - Click `...` (top-right)
-   - Select `Install from VSIX...`
-   - Choose the generated `.vsix` file (for example `opencode-vscode-0.0.1.vsix`)
-
-Optional CLI install:
-
-```bash
-code --install-extension .\opencode-vscode-0.0.1.vsix
-```
-
-Then reload VS Code and open the OpenCode icon in the Activity Bar.
-
-## Development
-
-- Open this folder in VS Code
-- Press `F5` to launch Extension Development Host
-- Open the OpenCode sidebar in the host window
+- `opencodeVisual.opencodePath`: CLI command or absolute path for OpenCode
+- `opencodeVisual.serverBaseUrl`: base URL for OpenCode server
+- `opencodeVisual.autoStartServer`: auto-run `opencode serve` when needed (default: `true`)
+- `opencodeVisual.debugServerLogs`: stream server logs to output channel
 
 ## Commands
 
@@ -65,9 +32,33 @@ Then reload VS Code and open the OpenCode icon in the Activity Bar.
 - `OpenCode: Open Settings`
 - `OpenCode: Restart Local Server`
 
-## Settings
+## Install from VSIX
 
-- `opencodeVisual.opencodePath`
-- `opencodeVisual.serverBaseUrl`
-- `opencodeVisual.autoStartServer`
-- `opencodeVisual.debugServerLogs`
+1. Build and package:
+
+```bash
+npm install
+npm run build
+npx @vscode/vsce package
+```
+
+2. Install generated VSIX:
+
+```bash
+code --install-extension .\opencode-vscode-0.1.0.vsix --force
+```
+
+Then run `Developer: Reload Window`.
+
+## Release and Publishing
+
+This repository is prepared for VS Code Marketplace publication with:
+
+- publisher metadata in `package.json`
+- MIT license in root `LICENSE`
+- release notes in `CHANGELOG.md`
+- third-party attribution in `THIRD_PARTY_NOTICES.md`
+
+## Legal Notes
+
+This extension includes generated webview assets derived from the upstream OpenCode project (`opencode-original`) under MIT terms. See `THIRD_PARTY_NOTICES.md` for attribution.
