@@ -1,17 +1,17 @@
 {
-  "name": "opencode-vscode",
+  "name": "opencode-for-vscode",
   "displayName": "OpenCode VS Code",
   "description": "VS Code sidebar client for OpenCode sessions.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "rodrigomart123",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rodrigomart123/opencode-vscode.git"
+    "url": "https://github.com/rodrigomart123/opencode-for-vscode.git"
   },
-  "homepage": "https://github.com/rodrigomart123/opencode-vscode#readme",
+  "homepage": "https://github.com/rodrigomart123/opencode-for-vscode#readme",
   "bugs": {
-    "url": "https://github.com/rodrigomart123/opencode-vscode/issues"
+    "url": "https://github.com/rodrigomart123/opencode-for-vscode/issues"
   },
   "engines": {
     "vscode": "^1.96.0"

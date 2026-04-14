@@ -2,7 +2,7 @@
 
 OpenCode VS Code brings OpenCode sessions into a native VS Code sidebar experience.
 
-Repository: `https://github.com/rodrigomart123/opencode-vscode`
+Repository: `https://github.com/rodrigomart123/opencode-for-vscode`
 
 ## Features
 
@@ -45,7 +45,7 @@ npx @vscode/vsce package
 2. Install generated VSIX:
 
 ```bash
-code --install-extension .\opencode-vscode-0.1.0.vsix --force
+code --install-extension .\opencode-for-vscode-0.1.0.vsix --force
 ```
 
 Then run `Developer: Reload Window`.

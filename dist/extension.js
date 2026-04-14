@@ -7398,7 +7398,7 @@ async function activate(context) {
     vscode4.commands.registerCommand("opencodeVisual.openSettings", async () => {
       await vscode4.commands.executeCommand(
         "workbench.action.openSettings",
-        "@ext:local.opencode-vscode opencodeVisual"
+        "@ext:rodrigomart123.opencode-for-vscode opencodeVisual"
       );
     }),
     vscode4.commands.registerCommand("opencodeVisual.restartServer", async () => {
