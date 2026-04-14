@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.1 - 2026-04-14
+
+- Corrected Marketplace identity metadata to publish under `rodrigomart123.opencode-for-vscode`.
+- Updated extension/package naming and install instructions to use `opencode-for-vscode` consistently.
+
 ## 0.1.0 - 2026-04-14
 
 - Stabilized workspace sync and reload behavior so switching files in the same workspace no longer resets the sidebar UI.
