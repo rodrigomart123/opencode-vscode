@@ -5885,9 +5885,10 @@ var OpenCodeService = class {
     const nextDirectory = this.getWorkspaceContext().directory;
     if (!this.sameDirectory(nextDirectory, this.currentDirectory)) {
       await this.ensureReady(true);
-      return;
+      return true;
     }
     this.emitState();
+    return false;
   }
   getState() {
     const workspace4 = this.getWorkspaceContext();
@@ -7351,6 +7352,15 @@ var OpenCodeSidebarProvider = class {
 async function activate(context) {
   const service = new OpenCodeService(context);
   const provider = new OpenCodeSidebarProvider(context, service);
+  const syncWorkspace = (reloadOnChange) => {
+    void service.syncWorkspaceContext().then(async (changed) => {
+      if (!reloadOnChange || !changed) {
+        return;
+      }
+      await provider.reload();
+    }).catch(() => {
+    });
+  };
   context.subscriptions.push(service, provider);
   context.subscriptions.push(
     vscode4.window.registerWebviewViewProvider(OpenCodeSidebarProvider.viewId, provider, {
@@ -7361,15 +7371,13 @@ async function activate(context) {
   );
   context.subscriptions.push(
     vscode4.window.onDidChangeActiveTextEditor(() => {
-      void service.syncWorkspaceContext();
-      void provider.reload();
+      syncWorkspace(false);
     }),
     vscode4.workspace.onDidChangeWorkspaceFolders(() => {
-      void service.syncWorkspaceContext();
-      void provider.reload();
+      syncWorkspace(true);
     }),
     vscode4.window.onDidChangeVisibleTextEditors(() => {
-      void service.syncWorkspaceContext();
+      syncWorkspace(false);
     }),
     vscode4.window.onDidChangeActiveColorTheme(() => {
       provider.notifyTheme();

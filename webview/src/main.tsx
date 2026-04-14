@@ -395,12 +395,16 @@ function HostBridge() {
   const command = useCommand();
   const navigate = useNavigate();
   let dead = false;
+  let booted = false;
 
   onCleanup(() => {
     dead = true;
   });
 
   onMount(() => {
+    if (booted) return;
+    booted = true;
+
     const directory = config.workspaceDirectory;
     if (!directory) return;
 

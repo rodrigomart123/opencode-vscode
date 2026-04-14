@@ -6,6 +6,20 @@ export async function activate(context: vscode.ExtensionContext) {
   const service = new OpenCodeService(context);
   const provider = new OpenCodeSidebarProvider(context, service);
 
+  const syncWorkspace = (reloadOnChange: boolean) => {
+    void service
+      .syncWorkspaceContext()
+      .then(async (changed) => {
+        if (!reloadOnChange || !changed) {
+          return;
+        }
+        await provider.reload();
+      })
+      .catch(() => {
+        // State errors are surfaced by the sidebar connection state.
+      });
+  };
+
   context.subscriptions.push(service, provider);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(OpenCodeSidebarProvider.viewId, provider, {
@@ -17,15 +31,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => {
-      void service.syncWorkspaceContext();
-      void provider.reload();
+      syncWorkspace(false);
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      void service.syncWorkspaceContext();
-      void provider.reload();
+      syncWorkspace(true);
     }),
     vscode.window.onDidChangeVisibleTextEditors(() => {
-      void service.syncWorkspaceContext();
+      syncWorkspace(false);
     }),
     vscode.window.onDidChangeActiveColorTheme(() => {
       provider.notifyTheme();

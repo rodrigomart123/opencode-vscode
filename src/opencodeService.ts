@@ -202,9 +202,10 @@ export class OpenCodeService implements vscode.Disposable {
     const nextDirectory = this.getWorkspaceContext().directory;
     if (!this.sameDirectory(nextDirectory, this.currentDirectory)) {
       await this.ensureReady(true);
-      return;
+      return true;
     }
     this.emitState();
+    return false;
   }
 
   getState(): SidebarState {
