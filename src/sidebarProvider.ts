@@ -109,14 +109,61 @@ export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vsco
     }
 
     this.ready = false;
-    const serverUrl = await this.service.ensureServerReady().catch(() => this.service.getResolvedServerBaseUrl());
+    let disableHealthCheck = false;
+    let serverUrl = this.service.getResolvedServerBaseUrl();
+    try {
+      serverUrl = await this.service.ensureServerReady();
+      disableHealthCheck = await this.shouldDisableHealthCheck(serverUrl);
+    } catch {
+      disableHealthCheck = true;
+      serverUrl = this.service.getResolvedServerBaseUrl();
+    }
     const workspaceDirectory = this.service.getWorkspaceContext().directory ?? null;
     this.view.webview.html = getWebviewHtml(this.view.webview, this.context.extensionUri, {
       serverUrl,
       version: String(this.context.extension.packageJSON.version ?? "0.0.0"),
       workspaceDirectory,
       colorScheme: this.getColorScheme(),
+      disableHealthCheck,
     });
+  }
+
+  private async shouldDisableHealthCheck(serverUrl: string) {
+    let target: string;
+    try {
+      target = new URL("/global/health", serverUrl).toString();
+    } catch {
+      return true;
+    }
+
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 2500);
+
+    try {
+      const response = await fetch(target, {
+        method: "GET",
+        signal: abort.signal,
+      });
+
+      if (response.status === 404 || response.status === 405 || response.status === 501) {
+        return true;
+      }
+
+      if (response.ok) {
+        return false;
+      }
+
+      const text = await response.text().catch(() => "");
+      if (/not found|unknown route|cannot\s+\w+\s+\/global\/health/i.test(text)) {
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private getColorScheme(): "light" | "dark" {
@@ -181,7 +228,15 @@ export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vsco
     try {
       const url = new URL(input);
       if (url.hostname === "opencode.localhost") {
-        url.hostname = "127.0.0.1";
+        const base = this.service.getResolvedServerBaseUrl();
+        try {
+          const target = new URL(base);
+          url.protocol = target.protocol;
+          url.hostname = target.hostname;
+          url.port = target.port;
+        } catch {
+          url.hostname = "127.0.0.1";
+        }
       }
       return url.toString();
     } catch {
@@ -189,17 +244,73 @@ export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vsco
     }
   }
 
+  private isLocalHostname(hostname: string) {
+    const normalized = hostname.toLowerCase();
+    return normalized === "opencode.localhost"
+      || normalized === "localhost"
+      || normalized === "127.0.0.1"
+      || normalized === "::1"
+      || normalized === "[::1]";
+  }
+
+  private buildFetchCandidates(input: string) {
+    const primary = this.resolveFetchUrl(input);
+    try {
+      const url = new URL(primary);
+      if (!this.isLocalHostname(url.hostname)) {
+        return [primary];
+      }
+
+      const candidates = [url.toString()];
+      for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+        const candidate = new URL(url.toString());
+        candidate.hostname = host;
+        const value = candidate.toString();
+        if (!candidates.includes(value)) {
+          candidates.push(value);
+        }
+      }
+      return candidates;
+    } catch {
+      return [primary];
+    }
+  }
+
+  private isNetworkFailure(error: unknown) {
+    const text = error instanceof Error ? error.message : String(error);
+    return /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(text);
+  }
+
   private async handleFetch(message: Extract<WebviewToHostMessage, { type: "fetchRequest" }>) {
     const abort = new AbortController();
     this.fetches.set(message.requestId, abort);
 
     try {
-      const response = await fetch(this.resolveFetchUrl(message.url), {
-        method: message.method,
-        headers: message.headers,
-        body: message.body ? Buffer.from(message.body, "base64") : undefined,
-        signal: abort.signal,
-      });
+      let response: Response | undefined;
+      let finalUrl = this.resolveFetchUrl(message.url);
+      let lastError: unknown;
+
+      for (const candidateUrl of this.buildFetchCandidates(message.url)) {
+        finalUrl = candidateUrl;
+        try {
+          response = await fetch(candidateUrl, {
+            method: message.method,
+            headers: message.headers,
+            body: message.body ? Buffer.from(message.body, "base64") : undefined,
+            signal: abort.signal,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (abort.signal.aborted || !this.isNetworkFailure(error)) {
+            throw error;
+          }
+        }
+      }
+
+      if (!response) {
+        throw lastError ?? new Error(`Failed to fetch ${finalUrl}`);
+      }
 
       this.postMessage({
         type: "fetchResponse",
@@ -232,11 +343,18 @@ export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vsco
       this.postMessage({ type: "fetchEnd", requestId: message.requestId });
     } catch (error) {
       if (!abort.signal.aborted) {
+        const messageText = error instanceof Error ? error.message : String(error);
+        const errorName = error instanceof Error ? error.name : undefined;
         this.postMessage({
           type: "fetchError",
           requestId: message.requestId,
-          message: error instanceof Error ? error.message : String(error),
+          message: messageText,
+          name: errorName,
         });
+
+        const urls = this.buildFetchCandidates(message.url);
+        const detail = `method=${message.method} urls=${urls.join(",")} error=${errorName ?? "Error"}: ${messageText}`;
+        this.service.reportNetworkIssue(detail);
       }
     } finally {
       this.fetches.delete(message.requestId);

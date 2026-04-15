@@ -35,7 +35,7 @@ var require_windows = __commonJS({
   "node_modules/isexe/windows.js"(exports2, module2) {
     module2.exports = isexe;
     isexe.sync = sync;
-    var fs = require("fs");
+    var fs2 = require("fs");
     function checkPathExt(path3, options) {
       var pathext = options.pathExt !== void 0 ? options.pathExt : process.env.PATHEXT;
       if (!pathext) {
@@ -60,12 +60,12 @@ var require_windows = __commonJS({
       return checkPathExt(path3, options);
     }
     function isexe(path3, options, cb) {
-      fs.stat(path3, function(er, stat) {
+      fs2.stat(path3, function(er, stat) {
         cb(er, er ? false : checkStat(stat, path3, options));
       });
     }
     function sync(path3, options) {
-      return checkStat(fs.statSync(path3), path3, options);
+      return checkStat(fs2.statSync(path3), path3, options);
     }
   }
 });
@@ -75,14 +75,14 @@ var require_mode = __commonJS({
   "node_modules/isexe/mode.js"(exports2, module2) {
     module2.exports = isexe;
     isexe.sync = sync;
-    var fs = require("fs");
+    var fs2 = require("fs");
     function isexe(path3, options, cb) {
-      fs.stat(path3, function(er, stat) {
+      fs2.stat(path3, function(er, stat) {
         cb(er, er ? false : checkStat(stat, options));
       });
     }
     function sync(path3, options) {
-      return checkStat(fs.statSync(path3), options);
+      return checkStat(fs2.statSync(path3), options);
     }
     function checkStat(stat, options) {
       return stat.isFile() && checkMode(stat, options);
@@ -106,7 +106,7 @@ var require_mode = __commonJS({
 // node_modules/isexe/index.js
 var require_isexe = __commonJS({
   "node_modules/isexe/index.js"(exports2, module2) {
-    var fs = require("fs");
+    var fs2 = require("fs");
     var core;
     if (process.platform === "win32" || global.TESTING_WINDOWS) {
       core = require_windows();
@@ -370,16 +370,16 @@ var require_shebang_command = __commonJS({
 var require_readShebang = __commonJS({
   "node_modules/cross-spawn/lib/util/readShebang.js"(exports2, module2) {
     "use strict";
-    var fs = require("fs");
+    var fs2 = require("fs");
     var shebangCommand = require_shebang_command();
     function readShebang(command) {
       const size = 150;
       const buffer = Buffer.alloc(size);
       let fd;
       try {
-        fd = fs.openSync(command, "r");
-        fs.readSync(fd, buffer, 0, size, 0);
-        fs.closeSync(fd);
+        fd = fs2.openSync(command, "r");
+        fs2.readSync(fd, buffer, 0, size, 0);
+        fs2.closeSync(fd);
       } catch (e) {
       }
       return shebangCommand(buffer.toString());
@@ -538,7 +538,9 @@ var vscode4 = __toESM(require("vscode"));
 
 // src/opencodeService.ts
 var import_node_child_process = require("node:child_process");
+var fs = __toESM(require("node:fs"));
 var net = __toESM(require("node:net"));
+var os = __toESM(require("node:os"));
 var path = __toESM(require("node:path"));
 var vscode = __toESM(require("vscode"));
 
@@ -5764,6 +5766,7 @@ var REQUEST_OPTIONS = {
 };
 var ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
 var LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
+var COMMAND_LOOKUP_TIMEOUT_MS = 2500;
 var windowsPath = (input) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
 var workspaceKey = (directory) => {
   const value = directory.replaceAll("\\", "/");
@@ -5792,6 +5795,10 @@ var OpenCodeService = class {
   client;
   server;
   streamAbort;
+  busyPollTimer;
+  busyPollSessionId;
+  busyPollPending = false;
+  networkNoticeUntil = 0;
   currentDirectory;
   bootstrapPromise;
   sessions = [];
@@ -5814,6 +5821,7 @@ var OpenCodeService = class {
   onDidChangeState = this.stateEmitter.event;
   dispose() {
     this.stopStream();
+    this.stopBusyPolling();
     this.stopServer();
     this.stateEmitter.dispose();
     this.output.dispose();
@@ -5881,6 +5889,33 @@ var OpenCodeService = class {
     this.stopServer();
     await this.ensureReady(true, true);
   }
+  reportNetworkIssue(detail) {
+    this.output.appendLine(`[network] ${detail}`);
+    const now = Date.now();
+    if (now < this.networkNoticeUntil) {
+      return;
+    }
+    this.networkNoticeUntil = now + 15e3;
+    const hint = this.getNetworkHint(detail);
+    void vscode.window.showWarningMessage(
+      hint,
+      "Open Settings",
+      "Restart Local Server",
+      "Show Output"
+    ).then((action) => {
+      if (action === "Open Settings") {
+        void vscode.commands.executeCommand("opencodeVisual.openSettings");
+        return;
+      }
+      if (action === "Restart Local Server") {
+        void vscode.commands.executeCommand("opencodeVisual.restartServer");
+        return;
+      }
+      if (action === "Show Output") {
+        this.output.show(true);
+      }
+    });
+  }
   async syncWorkspaceContext() {
     const nextDirectory = this.getWorkspaceContext().directory;
     if (!this.sameDirectory(nextDirectory, this.currentDirectory)) {
@@ -5938,6 +5973,7 @@ var OpenCodeService = class {
     this.upsertSession(session);
     this.activeSessionId = session.id;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     await this.loadActiveSession(session.id);
     this.emitState();
     return session;
@@ -5946,6 +5982,7 @@ var OpenCodeService = class {
     this.lastError = void 0;
     this.activeSessionId = sessionId;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     await this.loadActiveSession(sessionId);
     this.emitState();
   }
@@ -5966,6 +6003,7 @@ var OpenCodeService = class {
     });
     if (this.activeSessionId === sessionId) {
       this.activeSessionId = void 0;
+      this.updateBusyPolling();
     }
     await this.refreshState();
   }
@@ -6022,6 +6060,9 @@ var OpenCodeService = class {
       if (!command) {
         return;
       }
+      this.sessionStatuses.set(sessionId, { type: "busy" });
+      this.updateBusyPolling();
+      this.emitState();
       await client3.session.command({
         sessionID: sessionId,
         directory,
@@ -6042,6 +6083,9 @@ var OpenCodeService = class {
       });
     }
     parts.push(...attachments);
+    this.sessionStatuses.set(sessionId, { type: "busy" });
+    this.updateBusyPolling();
+    this.emitState();
     await client3.session.promptAsync({
       sessionID: sessionId,
       directory,
@@ -6232,6 +6276,7 @@ var OpenCodeService = class {
     const session = await this.createSessionWithTitle(titleSeed);
     this.activeSessionId = session.id;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     return session;
   }
   async createSessionWithTitle(titleSeed) {
@@ -6434,13 +6479,13 @@ var OpenCodeService = class {
     const statuses = this.unwrap(statusesResult);
     const providers = this.unwrap(providersResult);
     const agents = this.unwrap(agentsResult);
-    const commands3 = this.unwrap(commandsResult);
+    const commands4 = this.unwrap(commandsResult);
     const config = this.unwrap(configResult);
     const vcs = vcsResult ? this.unwrap(vcsResult) : void 0;
     const project = projectResult ? this.unwrap(projectResult) : null;
     this.sessions = [...sessions].sort((left, right) => right.time.updated - left.time.updated);
     this.sessionStatuses = new Map(Object.entries(statuses));
-    this.commands = commands3;
+    this.commands = commands4;
     this.agents = agents;
     this.providers = this.buildProviders(providers);
     this.models = this.flattenModels(providers);
@@ -6466,6 +6511,7 @@ var OpenCodeService = class {
       this.todos = [];
       this.diffs = [];
     }
+    this.updateBusyPolling();
     this.emitState();
   }
   normalizeComposer(configuredModel, providers) {
@@ -6653,39 +6699,141 @@ var OpenCodeService = class {
     this.stopStream();
     const abort = new AbortController();
     this.streamAbort = abort;
-    try {
-      const streamResult = await client3.event.subscribe({
-        ...REQUEST_OPTIONS,
-        signal: abort.signal,
-        onSseError: (error) => {
-          if (!abort.signal.aborted) {
-            this.output.appendLine(`[event] ${this.formatError(error)}`);
-          }
+    void (async () => {
+      while (!abort.signal.aborted) {
+        if (this.client !== client3) {
+          return;
         }
-      });
-      void (async () => {
         try {
+          const streamResult = await client3.event.subscribe({
+            ...REQUEST_OPTIONS,
+            signal: abort.signal,
+            onSseError: (error) => {
+              if (abort.signal.aborted) {
+                return;
+              }
+              const detail = `event stream transport error: ${this.formatError(error)}`;
+              this.output.appendLine(`[event] ${detail}`);
+              this.reportNetworkIssue(detail);
+            }
+          });
+          if (abort.signal.aborted || this.client !== client3) {
+            return;
+          }
+          if (this.connectionState.status !== "connected") {
+            this.connectionState = {
+              status: "connected",
+              baseUrl: this.connectionState.baseUrl,
+              managed: this.connectionState.managed
+            };
+            this.emitState();
+          }
           for await (const event of streamResult.stream) {
-            if (abort.signal.aborted) {
+            if (abort.signal.aborted || this.client !== client3) {
               return;
             }
             await this.handleEvent(event);
           }
         } catch (error) {
-          if (!abort.signal.aborted) {
-            this.output.appendLine(`[event-loop] ${this.formatError(error)}`);
+          if (abort.signal.aborted || this.client !== client3) {
+            return;
           }
+          const detail = `event stream failed: ${this.formatError(error)}`;
+          this.output.appendLine(`[event-loop] ${detail}`);
+          this.reportNetworkIssue(detail);
         }
-      })();
-    } catch (error) {
-      if (!abort.signal.aborted) {
-        this.output.appendLine(`[event-subscribe] ${this.formatError(error)}`);
+        if (abort.signal.aborted || this.client !== client3) {
+          return;
+        }
+        this.connectionState = {
+          status: "connecting",
+          baseUrl: this.connectionState.baseUrl,
+          managed: this.connectionState.managed,
+          error: "Reconnecting OpenCode event stream..."
+        };
+        this.emitState();
+        await this.sleep(400, abort.signal);
       }
-    }
+    })();
   }
   stopStream() {
     this.streamAbort?.abort();
     this.streamAbort = void 0;
+    this.stopBusyPolling();
+  }
+  updateBusyPolling() {
+    const sessionId = this.activeSessionId;
+    if (!sessionId) {
+      this.stopBusyPolling();
+      return;
+    }
+    const status = this.sessionStatuses.get(sessionId);
+    if (status?.type !== "busy") {
+      this.stopBusyPolling();
+      return;
+    }
+    if (this.busyPollTimer && this.busyPollSessionId === sessionId) {
+      return;
+    }
+    this.stopBusyPolling();
+    this.busyPollSessionId = sessionId;
+    this.busyPollTimer = setInterval(() => {
+      if (!this.busyPollSessionId) {
+        return;
+      }
+      void this.pollBusySession(this.busyPollSessionId);
+    }, 1200);
+    void this.pollBusySession(sessionId);
+  }
+  stopBusyPolling() {
+    if (this.busyPollTimer) {
+      clearInterval(this.busyPollTimer);
+      this.busyPollTimer = void 0;
+    }
+    this.busyPollSessionId = void 0;
+    this.busyPollPending = false;
+  }
+  async pollBusySession(sessionId) {
+    if (this.busyPollPending) {
+      return;
+    }
+    if (sessionId !== this.activeSessionId) {
+      this.stopBusyPolling();
+      return;
+    }
+    if (sessionId !== this.busyPollSessionId) {
+      return;
+    }
+    const status = this.sessionStatuses.get(sessionId);
+    if (status?.type !== "busy") {
+      this.stopBusyPolling();
+      return;
+    }
+    this.busyPollPending = true;
+    try {
+      await this.loadActiveSession(sessionId);
+    } catch (error) {
+      this.output.appendLine(`[busy-poll] ${this.formatError(error)}`);
+    } finally {
+      this.busyPollPending = false;
+    }
+  }
+  async sleep(ms, signal) {
+    await new Promise((resolve2) => {
+      if (signal.aborted) {
+        resolve2();
+        return;
+      }
+      const timeout = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve2();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        resolve2();
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
   async handleEvent(event) {
     switch (event.type) {
@@ -6706,6 +6854,7 @@ var OpenCodeService = class {
         this.sessions = this.sessions.filter((item) => item.id !== event.properties.info.id);
         if (this.activeSessionId === event.properties.info.id) {
           this.activeSessionId = this.sessions[0]?.id;
+          this.updateBusyPolling();
           if (this.activeSessionId) {
             await this.loadActiveSession(this.activeSessionId);
           } else {
@@ -6718,10 +6867,12 @@ var OpenCodeService = class {
       }
       case "session.status": {
         this.sessionStatuses.set(event.properties.sessionID, event.properties.status);
+        this.updateBusyPolling();
         break;
       }
       case "session.idle": {
         this.sessionStatuses.set(event.properties.sessionID, { type: "idle" });
+        this.updateBusyPolling();
         if (event.properties.sessionID === this.activeSessionId) {
           await this.loadActiveSession(event.properties.sessionID);
         }
@@ -6738,7 +6889,7 @@ var OpenCodeService = class {
         break;
       }
       case "message.part.updated": {
-        this.upsertPart(event.properties.part);
+        this.upsertPart(event.properties.part, event.properties.delta);
         break;
       }
       case "message.part.removed": {
@@ -6780,6 +6931,7 @@ var OpenCodeService = class {
         if (event.properties.sessionID) {
           this.sessionStatuses.set(event.properties.sessionID, { type: "idle" });
         }
+        this.updateBusyPolling();
         break;
       }
       case "session.compacted": {
@@ -6834,7 +6986,7 @@ var OpenCodeService = class {
       ...this.thread.slice(index + 1)
     ];
   }
-  upsertPart(part) {
+  upsertPart(part, delta) {
     if (part.sessionID !== this.activeSessionId) {
       return;
     }
@@ -6844,6 +6996,28 @@ var OpenCodeService = class {
     }
     const message = this.thread[messageIndex];
     const partIndex = message.parts.findIndex((item) => item.id === part.id);
+    if (typeof delta === "string" && delta && (part.type === "text" || part.type === "reasoning")) {
+      const nextText = typeof part.text === "string" ? part.text : "";
+      if (partIndex === -1) {
+        if (!nextText) {
+          part = {
+            ...part,
+            text: delta
+          };
+        }
+      } else {
+        const currentPart = message.parts[partIndex];
+        if (currentPart?.type === "text" || currentPart?.type === "reasoning") {
+          const currentText = typeof currentPart.text === "string" ? currentPart.text : "";
+          if (nextText === currentText) {
+            part = {
+              ...part,
+              text: currentText + delta
+            };
+          }
+        }
+      }
+    }
     const nextParts = partIndex === -1 ? [...message.parts, part] : [
       ...message.parts.slice(0, partIndex),
       part,
@@ -6910,12 +7084,12 @@ var OpenCodeService = class {
       `--hostname=${hostname}`,
       `--port=${String(port)}`
     ];
-    const proc = (0, import_node_child_process.spawn)(settings.opencodePath, args, {
+    const env2 = this.buildManagedServerEnv();
+    const command = await this.resolveOpencodeCommand(settings.opencodePath, env2.PATH);
+    const proc = (0, import_node_child_process.spawn)(command, args, {
       cwd: this.currentDirectory,
-      env: {
-        ...process.env
-      },
-      shell: process.platform === "win32",
+      env: env2,
+      shell: process.platform === "win32" && (!this.looksLikeFilePath(command) || this.requiresWindowsShell(command)),
       stdio: "pipe"
     });
     const url = await new Promise((resolve2, reject) => {
@@ -6994,11 +7168,225 @@ var OpenCodeService = class {
     this.server.process.kill();
     this.server = void 0;
   }
-  formatError(error) {
-    if (error instanceof Error) {
-      return error.message;
+  buildManagedServerEnv() {
+    const env2 = {
+      ...process.env
+    };
+    if (process.platform === "win32") {
+      return env2;
     }
-    return String(error);
+    const current = this.splitPathEntries(env2.PATH);
+    const extras = this.getCommonBinaryDirectories();
+    for (const entry of extras) {
+      if (!current.includes(entry)) {
+        current.push(entry);
+      }
+    }
+    env2.PATH = current.join(path.delimiter);
+    return env2;
+  }
+  getCommonBinaryDirectories() {
+    if (process.platform === "win32") {
+      return [];
+    }
+    const home = os.homedir();
+    const candidates = [
+      "/opt/homebrew/sbin",
+      "/opt/homebrew/bin",
+      "/usr/local/sbin",
+      "/usr/local/bin",
+      "/usr/sbin",
+      "/usr/bin",
+      "/snap/bin",
+      "/var/lib/snapd/snap/bin",
+      home ? path.join(home, ".local", "bin") : "",
+      home ? path.join(home, ".bun", "bin") : "",
+      home ? path.join(home, ".cargo", "bin") : "",
+      home ? path.join(home, "bin") : ""
+    ];
+    return candidates.filter((entry) => Boolean(entry) && fs.existsSync(entry));
+  }
+  splitPathEntries(value) {
+    return (value ?? "").split(path.delimiter).map((item) => item.trim()).filter(Boolean);
+  }
+  looksLikeFilePath(value) {
+    return value.startsWith("~") || path.isAbsolute(value) || value.includes("/") || value.includes("\\");
+  }
+  requiresWindowsShell(value) {
+    if (process.platform !== "win32") {
+      return false;
+    }
+    const ext = path.extname(value).toLowerCase();
+    return ext === ".cmd" || ext === ".bat";
+  }
+  expandHomeDirectory(value) {
+    if (!value.startsWith("~")) {
+      return value;
+    }
+    const home = os.homedir();
+    if (!home) {
+      return value;
+    }
+    if (value === "~") {
+      return home;
+    }
+    if (value.startsWith("~/") || value.startsWith("~\\")) {
+      return path.join(home, value.slice(2));
+    }
+    return value;
+  }
+  async resolveOpencodeCommand(configuredPath, envPath) {
+    const configured = (configuredPath || "opencode").trim() || "opencode";
+    const expanded = this.expandHomeDirectory(configured);
+    if (this.looksLikeFilePath(expanded)) {
+      if (await this.fileCanExecute(expanded)) {
+        return expanded;
+      }
+      throw new Error(`OpenCode executable not found at configured path: ${expanded}`);
+    }
+    const fromPath = await this.resolveCommandFromPath(expanded, envPath);
+    if (fromPath) {
+      return fromPath;
+    }
+    if (expanded === "opencode") {
+      const fromWellKnown = await this.resolveFromWellKnownLocations();
+      if (fromWellKnown) {
+        return fromWellKnown;
+      }
+    }
+    const fromShell = await this.resolveCommandFromLoginShell(expanded);
+    if (fromShell) {
+      return fromShell;
+    }
+    return expanded;
+  }
+  async resolveCommandFromPath(command, pathValue) {
+    const directories = this.splitPathEntries(pathValue);
+    if (directories.length === 0) {
+      return void 0;
+    }
+    const hasExt = path.extname(command).length > 0;
+    const pathExtensions = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").map((item) => item.trim()).filter(Boolean) : [];
+    for (const directory of directories) {
+      const base = path.join(directory, command);
+      const candidates = process.platform === "win32" && !hasExt ? pathExtensions.map((ext) => `${base}${ext}`) : [base];
+      for (const candidate of candidates) {
+        if (await this.fileCanExecute(candidate)) {
+          return candidate;
+        }
+      }
+    }
+    return void 0;
+  }
+  async fileCanExecute(filePath) {
+    const mode = process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK;
+    try {
+      await fs.promises.access(filePath, mode);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async resolveFromWellKnownLocations() {
+    const candidates = [];
+    const home = os.homedir();
+    if (process.platform === "win32") {
+      if (process.env.LOCALAPPDATA) {
+        candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "opencode", "opencode.exe"));
+      }
+      if (home) {
+        candidates.push(path.join(home, "scoop", "shims", "opencode.exe"));
+      }
+    } else {
+      candidates.push(
+        "/opt/homebrew/bin/opencode",
+        "/usr/local/bin/opencode",
+        "/usr/bin/opencode",
+        "/snap/bin/opencode",
+        "/var/lib/snapd/snap/bin/opencode"
+      );
+      if (home) {
+        candidates.push(
+          path.join(home, ".local", "bin", "opencode"),
+          path.join(home, "bin", "opencode")
+        );
+      }
+    }
+    for (const candidate of candidates) {
+      if (await this.fileCanExecute(candidate)) {
+        return candidate;
+      }
+    }
+    return void 0;
+  }
+  async resolveCommandFromLoginShell(command) {
+    if (process.platform === "win32") {
+      return void 0;
+    }
+    if (!/^[A-Za-z0-9._-]+$/.test(command)) {
+      return void 0;
+    }
+    const shell = process.env.SHELL;
+    if (!shell) {
+      return void 0;
+    }
+    const located = await new Promise((resolve2) => {
+      const proc = (0, import_node_child_process.spawn)(shell, ["-ilc", `command -v ${command}`], {
+        env: {
+          ...process.env
+        },
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+      const timeout = setTimeout(() => {
+        proc.kill();
+        resolve2(void 0);
+      }, COMMAND_LOOKUP_TIMEOUT_MS);
+      let stdout = "";
+      proc.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      proc.on("error", () => {
+        clearTimeout(timeout);
+        resolve2(void 0);
+      });
+      proc.on("exit", () => {
+        clearTimeout(timeout);
+        const candidate = stdout.split(/\r?\n/).map((line) => line.trim()).find((line) => line.startsWith("/") || /^[A-Za-z]:[\\/]/.test(line));
+        resolve2(candidate ? this.expandHomeDirectory(candidate) : void 0);
+      });
+    });
+    if (!located) {
+      return void 0;
+    }
+    if (await this.fileCanExecute(located)) {
+      return located;
+    }
+    return void 0;
+  }
+  formatError(error) {
+    const text = error instanceof Error ? error.message : String(error);
+    if (/executable not found at configured path:/i.test(text)) {
+      return `${text}. Update opencodeVisual.opencodePath to a valid executable path.`;
+    }
+    if (/enoent|not recognized as an internal or external command|spawn\s+.*\s+enoent/i.test(text)) {
+      return "OpenCode CLI was not found. Install OpenCode or set opencodeVisual.opencodePath to the full executable path.";
+    }
+    if (/timed out while starting the opencode server/i.test(text)) {
+      return "Timed out while starting OpenCode server. Verify `opencode serve` works in a terminal and that localhost is reachable.";
+    }
+    return text;
+  }
+  getNetworkHint(detail) {
+    if (/executable not found at configured path:/i.test(detail)) {
+      return "Configured OpenCode path is invalid. Update `opencodeVisual.opencodePath` to a valid executable path.";
+    }
+    if (/enoent|not found|not recognized as an internal or external command|spawn\s+.*\s+enoent/i.test(detail)) {
+      return "OpenCode CLI is not available to VS Code. Set `opencodeVisual.opencodePath` to the full path (for example `/opt/homebrew/bin/opencode` or `~/.local/bin/opencode`).";
+    }
+    if (/econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(detail.toLowerCase())) {
+      return "OpenCode server is unreachable. Check `opencodeVisual.serverBaseUrl`, then restart the local server from the command palette.";
+    }
+    return "OpenCode request failed. Open extension output for diagnostics.";
   }
   emitState() {
     this.stateEmitter.fire(this.getState());
@@ -7235,14 +7623,54 @@ var OpenCodeSidebarProvider = class {
       return;
     }
     this.ready = false;
-    const serverUrl = await this.service.ensureServerReady().catch(() => this.service.getResolvedServerBaseUrl());
+    let disableHealthCheck = false;
+    let serverUrl = this.service.getResolvedServerBaseUrl();
+    try {
+      serverUrl = await this.service.ensureServerReady();
+      disableHealthCheck = await this.shouldDisableHealthCheck(serverUrl);
+    } catch {
+      disableHealthCheck = true;
+      serverUrl = this.service.getResolvedServerBaseUrl();
+    }
     const workspaceDirectory = this.service.getWorkspaceContext().directory ?? null;
     this.view.webview.html = getWebviewHtml(this.view.webview, this.context.extensionUri, {
       serverUrl,
       version: String(this.context.extension.packageJSON.version ?? "0.0.0"),
       workspaceDirectory,
-      colorScheme: this.getColorScheme()
+      colorScheme: this.getColorScheme(),
+      disableHealthCheck
     });
+  }
+  async shouldDisableHealthCheck(serverUrl) {
+    let target;
+    try {
+      target = new URL("/global/health", serverUrl).toString();
+    } catch {
+      return true;
+    }
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 2500);
+    try {
+      const response = await fetch(target, {
+        method: "GET",
+        signal: abort.signal
+      });
+      if (response.status === 404 || response.status === 405 || response.status === 501) {
+        return true;
+      }
+      if (response.ok) {
+        return false;
+      }
+      const text = await response.text().catch(() => "");
+      if (/not found|unknown route|cannot\s+\w+\s+\/global\/health/i.test(text)) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   getColorScheme() {
     const kind = vscode3.window.activeColorTheme.kind;
@@ -7292,23 +7720,77 @@ var OpenCodeSidebarProvider = class {
     try {
       const url = new URL(input);
       if (url.hostname === "opencode.localhost") {
-        url.hostname = "127.0.0.1";
+        const base = this.service.getResolvedServerBaseUrl();
+        try {
+          const target = new URL(base);
+          url.protocol = target.protocol;
+          url.hostname = target.hostname;
+          url.port = target.port;
+        } catch {
+          url.hostname = "127.0.0.1";
+        }
       }
       return url.toString();
     } catch {
       return input;
     }
   }
+  isLocalHostname(hostname) {
+    const normalized = hostname.toLowerCase();
+    return normalized === "opencode.localhost" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+  }
+  buildFetchCandidates(input) {
+    const primary = this.resolveFetchUrl(input);
+    try {
+      const url = new URL(primary);
+      if (!this.isLocalHostname(url.hostname)) {
+        return [primary];
+      }
+      const candidates = [url.toString()];
+      for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+        const candidate = new URL(url.toString());
+        candidate.hostname = host;
+        const value = candidate.toString();
+        if (!candidates.includes(value)) {
+          candidates.push(value);
+        }
+      }
+      return candidates;
+    } catch {
+      return [primary];
+    }
+  }
+  isNetworkFailure(error) {
+    const text = error instanceof Error ? error.message : String(error);
+    return /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(text);
+  }
   async handleFetch(message) {
     const abort = new AbortController();
     this.fetches.set(message.requestId, abort);
     try {
-      const response = await fetch(this.resolveFetchUrl(message.url), {
-        method: message.method,
-        headers: message.headers,
-        body: message.body ? Buffer.from(message.body, "base64") : void 0,
-        signal: abort.signal
-      });
+      let response;
+      let finalUrl = this.resolveFetchUrl(message.url);
+      let lastError;
+      for (const candidateUrl of this.buildFetchCandidates(message.url)) {
+        finalUrl = candidateUrl;
+        try {
+          response = await fetch(candidateUrl, {
+            method: message.method,
+            headers: message.headers,
+            body: message.body ? Buffer.from(message.body, "base64") : void 0,
+            signal: abort.signal
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (abort.signal.aborted || !this.isNetworkFailure(error)) {
+            throw error;
+          }
+        }
+      }
+      if (!response) {
+        throw lastError ?? new Error(`Failed to fetch ${finalUrl}`);
+      }
       this.postMessage({
         type: "fetchResponse",
         requestId: message.requestId,
@@ -7336,11 +7818,17 @@ var OpenCodeSidebarProvider = class {
       this.postMessage({ type: "fetchEnd", requestId: message.requestId });
     } catch (error) {
       if (!abort.signal.aborted) {
+        const messageText = error instanceof Error ? error.message : String(error);
+        const errorName = error instanceof Error ? error.name : void 0;
         this.postMessage({
           type: "fetchError",
           requestId: message.requestId,
-          message: error instanceof Error ? error.message : String(error)
+          message: messageText,
+          name: errorName
         });
+        const urls = this.buildFetchCandidates(message.url);
+        const detail = `method=${message.method} urls=${urls.join(",")} error=${errorName ?? "Error"}: ${messageText}`;
+        this.service.reportNetworkIssue(detail);
       }
     } finally {
       this.fetches.delete(message.requestId);

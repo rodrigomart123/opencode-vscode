@@ -16,6 +16,7 @@ declare global {
       version: string;
       workspaceDirectory: string | null;
       colorScheme: "light" | "dark";
+      disableHealthCheck?: boolean;
     };
     acquireVsCodeApi?: () => {
       postMessage: (message: WebviewToHostMessage) => void;
@@ -43,8 +44,13 @@ const requests = new Map<string, {
   resolve: (value: Response | PromiseLike<Response>) => void;
   reject: (reason?: unknown) => void;
   controller?: ReadableStreamDefaultController<Uint8Array>;
+  responded: boolean;
+  timeout?: ReturnType<typeof setTimeout>;
 }>();
+const hostActionListeners = new Set<(action: HostAction) => void>();
+let hostMessageBridgeStarted = false;
 const [hostScheme, setHostScheme] = createSignal<"light" | "dark">(config.colorScheme);
+const FETCH_HEADER_TIMEOUT_MS = 20000;
 
 function requestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -66,6 +72,52 @@ function decode(value: string) {
     bytes[index] = text.charCodeAt(index);
   }
   return bytes;
+}
+
+function abortError(message = "The operation was aborted") {
+  try {
+    return new DOMException(message, "AbortError");
+  } catch {
+    const error = new Error(message);
+    error.name = "AbortError";
+    return error;
+  }
+}
+
+function fetchHint(message: string, name?: string) {
+  if (name === "AbortError") {
+    return message;
+  }
+
+  const text = message.toLowerCase();
+  if (/enoent|not recognized as an internal or external command|spawn\s+.*\s+enoent/.test(text)) {
+    return "OpenCode CLI was not found. Set opencodeVisual.opencodePath to your opencode executable.";
+  }
+
+  if (/econnrefused|fetch failed|timed out|enotfound|eai_again|socket|networkerror/.test(text)) {
+    return "Could not reach OpenCode server. Check opencodeVisual.serverBaseUrl and restart the local server.";
+  }
+
+  return message;
+}
+
+function fetchError(message: string, name?: string) {
+  if (name === "AbortError") {
+    return abortError(message || "The operation was aborted");
+  }
+
+  const hint = fetchHint(message, name);
+  const error = new TypeError(hint);
+  if (name && name !== "TypeError") {
+    try {
+      Object.defineProperty(error, "name", {
+        value: name,
+      });
+    } catch {
+      error.name = name;
+    }
+  }
+  return error;
 }
 
 function aliasServerUrl(input: string) {
@@ -98,11 +150,22 @@ function handleHostMessage(message: HostToWebviewMessage) {
     const request = requests.get(message.requestId);
     if (!request) return true;
 
+    request.responded = true;
+    if (request.timeout) {
+      clearTimeout(request.timeout);
+      request.timeout = undefined;
+    }
+
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         request.controller = controller;
       },
       cancel() {
+        if (request.timeout) {
+          clearTimeout(request.timeout);
+          request.timeout = undefined;
+        }
+        requests.delete(message.requestId);
         vscode?.postMessage({ type: "fetchAbort", requestId: message.requestId });
       },
     });
@@ -123,6 +186,10 @@ function handleHostMessage(message: HostToWebviewMessage) {
 
   if (message.type === "fetchEnd") {
     const request = requests.get(message.requestId);
+    if (request?.timeout) {
+      clearTimeout(request.timeout);
+      request.timeout = undefined;
+    }
     request?.controller?.close();
     requests.delete(message.requestId);
     return true;
@@ -131,16 +198,44 @@ function handleHostMessage(message: HostToWebviewMessage) {
   if (message.type === "fetchError") {
     const request = requests.get(message.requestId);
     if (!request) return true;
+    if (request.timeout) {
+      clearTimeout(request.timeout);
+      request.timeout = undefined;
+    }
+    const error = fetchError(message.message, message.name);
     if (request.controller) {
-      request.controller.error(new Error(message.message));
+      request.controller.error(error);
     } else {
-      request.reject(new TypeError(message.message));
+      request.reject(error);
     }
     requests.delete(message.requestId);
     return true;
   }
 
   return false;
+}
+
+function startHostMessageBridge() {
+  if (hostMessageBridgeStarted) {
+    return;
+  }
+
+  hostMessageBridgeStarted = true;
+  window.addEventListener("message", (event: MessageEvent<HostToWebviewMessage>) => {
+    if (handleHostMessage(event.data)) {
+      return;
+    }
+
+    if (event.data?.type !== "hostAction") {
+      return;
+    }
+
+    for (const listener of hostActionListeners) {
+      listener(event.data.action);
+    }
+  });
+
+  vscode?.postMessage({ type: "webviewReady" });
 }
 
 function shouldBridge(input: RequestInfo | URL) {
@@ -162,16 +257,50 @@ async function hostFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
 
   const request = input instanceof Request ? input : new Request(input, init);
+  if (request.signal.aborted) {
+    throw abortError();
+  }
   const id = requestId();
   const body = request.method === "GET" || request.method === "HEAD"
     ? undefined
     : encode(await request.clone().arrayBuffer());
 
   const promise = new Promise<Response>((resolve, reject) => {
-    requests.set(id, { resolve, reject });
+    requests.set(id, { resolve, reject, responded: false });
   });
 
+  const requestState = requests.get(id);
+  if (requestState) {
+    requestState.timeout = setTimeout(() => {
+      const current = requests.get(id);
+      if (!current || current.responded) {
+        return;
+      }
+
+      requests.delete(id);
+      current.reject(fetchError("OpenCode request timed out before response headers were received."));
+      vscode.postMessage({ type: "fetchAbort", requestId: id });
+    }, FETCH_HEADER_TIMEOUT_MS);
+  }
+
   request.signal.addEventListener("abort", () => {
+    const current = requests.get(id);
+    if (!current) {
+      return;
+    }
+
+    if (current.timeout) {
+      clearTimeout(current.timeout);
+      current.timeout = undefined;
+    }
+
+    requests.delete(id);
+    const error = abortError();
+    if (current.controller) {
+      current.controller.error(error);
+    } else {
+      current.reject(error);
+    }
     vscode.postMessage({ type: "fetchAbort", requestId: id });
   }, { once: true });
 
@@ -207,6 +336,19 @@ function writeStorage(key: string, value: string | null) {
   } catch {
     return;
   }
+}
+
+function readDefaultServerKey() {
+  const value = readStorage(DEFAULT_SERVER_URL_KEY);
+  if (!value) {
+    return null;
+  }
+
+  const normalized = aliasServerUrl(value);
+  if (normalized !== value) {
+    writeStorage(DEFAULT_SERVER_URL_KEY, normalized);
+  }
+  return normalized;
 }
 
 function key(dir: string) {
@@ -383,13 +525,15 @@ const platform: Platform = {
     });
   },
   getDefaultServer: async () => {
-    const value = readStorage(DEFAULT_SERVER_URL_KEY);
+    const value = readDefaultServerKey();
     return value ? ServerConnection.Key.make(value) : null;
   },
   setDefaultServer(url) {
-    writeStorage(DEFAULT_SERVER_URL_KEY, url ?? null);
+    writeStorage(DEFAULT_SERVER_URL_KEY, url ? aliasServerUrl(url) : null);
   },
 };
+
+startHostMessageBridge();
 
 function HostBridge() {
   const command = useCommand();
@@ -431,15 +575,12 @@ function HostBridge() {
   };
 
   onMount(() => {
-    const onMessage = (event: MessageEvent<HostToWebviewMessage>) => {
-      if (handleHostMessage(event.data)) return;
-      if (event.data?.type !== "hostAction") return;
-      trigger(event.data.action);
+    const listener = (action: HostAction) => {
+      trigger(action);
     };
 
-    window.addEventListener("message", onMessage);
-    vscode?.postMessage({ type: "webviewReady" });
-    onCleanup(() => window.removeEventListener("message", onMessage));
+    hostActionListeners.add(listener);
+    onCleanup(() => hostActionListeners.delete(listener));
   });
 
   return null;
@@ -473,12 +614,12 @@ render(
   () => (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <AppInterface
-          defaultServer={ServerConnection.Key.make(readStorage(DEFAULT_SERVER_URL_KEY) || config.serverUrl)}
-          servers={[server]}
-          router={MemoryRouter}
-          disableHealthCheck
-        >
+          <AppInterface
+            defaultServer={ServerConnection.Key.make(readDefaultServerKey() || aliasServerUrl(config.serverUrl))}
+            servers={[server]}
+            router={MemoryRouter}
+            disableHealthCheck={Boolean(config.disableHealthCheck)}
+          >
           <HostThemeBridge />
           <HostBridge />
         </AppInterface>

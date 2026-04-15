@@ -15,6 +15,7 @@
 !media/app/assets/*.ttf
 !media/app/assets/*.aac
 !package.json
+!icon.png
 !README.md
 !CHANGELOG.md
 !LICENSE

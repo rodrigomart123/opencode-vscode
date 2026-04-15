@@ -59,6 +59,7 @@ export function getWebviewHtml(
     version: string;
     workspaceDirectory: string | null;
     colorScheme: "light" | "dark";
+    disableHealthCheck: boolean;
   },
 ) {
   const nonce = createNonce();

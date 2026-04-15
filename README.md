@@ -15,14 +15,23 @@ Repository: `https://github.com/rodrigomart123/opencode-for-vscode`
 ## Requirements
 
 - VS Code `1.96.0` or newer
-- OpenCode CLI available as `opencode` in PATH, or set `opencodeVisual.opencodePath`
+- OpenCode CLI installed (for example via Homebrew, npm, or curl installer)
+
+Note: VS Code can launch without your interactive shell startup files, so PATH can differ from terminal. The extension now tries PATH, well-known install locations, and login-shell lookup. If auto-detection still fails, set `opencodeVisual.opencodePath` to the full executable path (for example `/opt/homebrew/bin/opencode`, `~/.local/bin/opencode`, or `C:\\Users\\you\\scoop\\shims\\opencode.exe`).
 
 ## Extension Settings
 
-- `opencodeVisual.opencodePath`: CLI command or absolute path for OpenCode
+- `opencodeVisual.opencodePath`: CLI command or executable path for OpenCode (supports `~`)
 - `opencodeVisual.serverBaseUrl`: base URL for OpenCode server
 - `opencodeVisual.autoStartServer`: auto-run `opencode serve` when needed (default: `true`)
 - `opencodeVisual.debugServerLogs`: stream server logs to output channel
+
+## Troubleshooting CLI detection
+
+- If OpenCode works in terminal but not in VS Code, set `opencodeVisual.opencodePath` to the full executable path.
+- macOS/Linux: run `command -v opencode` in terminal and copy that path into settings.
+- Windows (PowerShell): run `Get-Command opencode | Select-Object -ExpandProperty Source`.
+- Open `View -> Output`, then select `OpenCode VS Code` to inspect server startup diagnostics.
 
 ## Commands
 
@@ -45,7 +54,7 @@ npx @vscode/vsce package
 2. Install generated VSIX:
 
 ```bash
-code --install-extension .\opencode-for-vscode-0.1.0.vsix --force
+code --install-extension .\opencode-for-vscode-<version>.vsix --force
 ```
 
 Then run `Developer: Reload Window`.

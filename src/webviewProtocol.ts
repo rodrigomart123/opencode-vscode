@@ -28,6 +28,7 @@ export type HostToWebviewMessage = {
   type: "fetchError";
   requestId: string;
   message: string;
+  name?: string;
 };
 
 export type WebviewToHostMessage =

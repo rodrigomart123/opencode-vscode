@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import * as fs from "node:fs";
 import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -60,6 +62,7 @@ type ProviderCatalogModel = V2ProviderListResponse["all"][number]["models"][stri
 type ResolvedConfig = Pick<Config, "model" | "small_model">;
 const ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
 const LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
+const COMMAND_LOOKUP_TIMEOUT_MS = 2500;
 
 const windowsPath = (input: string) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
 
@@ -85,6 +88,10 @@ export class OpenCodeService implements vscode.Disposable {
   private client?: OpencodeClient;
   private server?: LocalServerHandle;
   private streamAbort?: AbortController;
+  private busyPollTimer?: ReturnType<typeof setInterval>;
+  private busyPollSessionId?: string;
+  private busyPollPending = false;
+  private networkNoticeUntil = 0;
   private currentDirectory?: string;
   private bootstrapPromise?: Promise<void>;
 
@@ -119,6 +126,7 @@ export class OpenCodeService implements vscode.Disposable {
 
   dispose() {
     this.stopStream();
+    this.stopBusyPolling();
     this.stopServer();
     this.stateEmitter.dispose();
     this.output.dispose();
@@ -198,6 +206,40 @@ export class OpenCodeService implements vscode.Disposable {
     await this.ensureReady(true, true);
   }
 
+  reportNetworkIssue(detail: string) {
+    this.output.appendLine(`[network] ${detail}`);
+
+    const now = Date.now();
+    if (now < this.networkNoticeUntil) {
+      return;
+    }
+
+    this.networkNoticeUntil = now + 15000;
+    const hint = this.getNetworkHint(detail);
+    void vscode.window
+      .showWarningMessage(
+        hint,
+        "Open Settings",
+        "Restart Local Server",
+        "Show Output",
+      )
+      .then((action) => {
+        if (action === "Open Settings") {
+          void vscode.commands.executeCommand("opencodeVisual.openSettings");
+          return;
+        }
+
+        if (action === "Restart Local Server") {
+          void vscode.commands.executeCommand("opencodeVisual.restartServer");
+          return;
+        }
+
+        if (action === "Show Output") {
+          this.output.show(true);
+        }
+      });
+  }
+
   async syncWorkspaceContext() {
     const nextDirectory = this.getWorkspaceContext().directory;
     if (!this.sameDirectory(nextDirectory, this.currentDirectory)) {
@@ -265,6 +307,7 @@ export class OpenCodeService implements vscode.Disposable {
     this.upsertSession(session);
     this.activeSessionId = session.id;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     await this.loadActiveSession(session.id);
     this.emitState();
     return session;
@@ -274,6 +317,7 @@ export class OpenCodeService implements vscode.Disposable {
     this.lastError = undefined;
     this.activeSessionId = sessionId;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     await this.loadActiveSession(sessionId);
     this.emitState();
   }
@@ -298,6 +342,7 @@ export class OpenCodeService implements vscode.Disposable {
 
     if (this.activeSessionId === sessionId) {
       this.activeSessionId = undefined;
+      this.updateBusyPolling();
     }
 
     await this.refreshState();
@@ -364,6 +409,9 @@ export class OpenCodeService implements vscode.Disposable {
       if (!command) {
         return;
       }
+      this.sessionStatuses.set(sessionId, { type: "busy" });
+      this.updateBusyPolling();
+      this.emitState();
       await client.session.command({
         sessionID: sessionId,
         directory,
@@ -385,6 +433,10 @@ export class OpenCodeService implements vscode.Disposable {
       });
     }
     parts.push(...attachments);
+
+    this.sessionStatuses.set(sessionId, { type: "busy" });
+    this.updateBusyPolling();
+    this.emitState();
 
     await client.session.promptAsync({
       sessionID: sessionId,
@@ -605,6 +657,7 @@ export class OpenCodeService implements vscode.Disposable {
     const session = await this.createSessionWithTitle(titleSeed);
     this.activeSessionId = session.id;
     this.persistActiveSessionId();
+    this.updateBusyPolling();
     return session;
   }
 
@@ -885,6 +938,7 @@ export class OpenCodeService implements vscode.Disposable {
       this.diffs = [];
     }
 
+    this.updateBusyPolling();
     this.emitState();
   }
 
@@ -1124,41 +1178,166 @@ export class OpenCodeService implements vscode.Disposable {
     const abort = new AbortController();
     this.streamAbort = abort;
 
-    try {
-      const streamResult = await client.event.subscribe({
-        ...REQUEST_OPTIONS,
-        signal: abort.signal,
-        onSseError: (error: unknown) => {
-          if (!abort.signal.aborted) {
-            this.output.appendLine(`[event] ${this.formatError(error)}`);
-          }
-        },
-      });
+    void (async () => {
+      while (!abort.signal.aborted) {
+        if (this.client !== client) {
+          return;
+        }
 
-      void (async () => {
         try {
+          const streamResult = await client.event.subscribe({
+            ...REQUEST_OPTIONS,
+            signal: abort.signal,
+            onSseError: (error: unknown) => {
+              if (abort.signal.aborted) {
+                return;
+              }
+
+              const detail = `event stream transport error: ${this.formatError(error)}`;
+              this.output.appendLine(`[event] ${detail}`);
+              this.reportNetworkIssue(detail);
+            },
+          });
+
+          if (abort.signal.aborted || this.client !== client) {
+            return;
+          }
+
+          if (this.connectionState.status !== "connected") {
+            this.connectionState = {
+              status: "connected",
+              baseUrl: this.connectionState.baseUrl,
+              managed: this.connectionState.managed,
+            };
+            this.emitState();
+          }
+
           for await (const event of streamResult.stream) {
-            if (abort.signal.aborted) {
+            if (abort.signal.aborted || this.client !== client) {
               return;
             }
             await this.handleEvent(event as Event);
           }
         } catch (error) {
-          if (!abort.signal.aborted) {
-            this.output.appendLine(`[event-loop] ${this.formatError(error)}`);
+          if (abort.signal.aborted || this.client !== client) {
+            return;
           }
+
+          const detail = `event stream failed: ${this.formatError(error)}`;
+          this.output.appendLine(`[event-loop] ${detail}`);
+          this.reportNetworkIssue(detail);
         }
-      })();
-    } catch (error) {
-      if (!abort.signal.aborted) {
-        this.output.appendLine(`[event-subscribe] ${this.formatError(error)}`);
+
+        if (abort.signal.aborted || this.client !== client) {
+          return;
+        }
+
+        this.connectionState = {
+          status: "connecting",
+          baseUrl: this.connectionState.baseUrl,
+          managed: this.connectionState.managed,
+          error: "Reconnecting OpenCode event stream...",
+        };
+        this.emitState();
+        await this.sleep(400, abort.signal);
       }
-    }
+    })();
   }
 
   private stopStream() {
     this.streamAbort?.abort();
     this.streamAbort = undefined;
+    this.stopBusyPolling();
+  }
+
+  private updateBusyPolling() {
+    const sessionId = this.activeSessionId;
+    if (!sessionId) {
+      this.stopBusyPolling();
+      return;
+    }
+
+    const status = this.sessionStatuses.get(sessionId);
+    if (status?.type !== "busy") {
+      this.stopBusyPolling();
+      return;
+    }
+
+    if (this.busyPollTimer && this.busyPollSessionId === sessionId) {
+      return;
+    }
+
+    this.stopBusyPolling();
+    this.busyPollSessionId = sessionId;
+
+    this.busyPollTimer = setInterval(() => {
+      if (!this.busyPollSessionId) {
+        return;
+      }
+      void this.pollBusySession(this.busyPollSessionId);
+    }, 1200);
+
+    void this.pollBusySession(sessionId);
+  }
+
+  private stopBusyPolling() {
+    if (this.busyPollTimer) {
+      clearInterval(this.busyPollTimer);
+      this.busyPollTimer = undefined;
+    }
+    this.busyPollSessionId = undefined;
+    this.busyPollPending = false;
+  }
+
+  private async pollBusySession(sessionId: string) {
+    if (this.busyPollPending) {
+      return;
+    }
+
+    if (sessionId !== this.activeSessionId) {
+      this.stopBusyPolling();
+      return;
+    }
+
+    if (sessionId !== this.busyPollSessionId) {
+      return;
+    }
+
+    const status = this.sessionStatuses.get(sessionId);
+    if (status?.type !== "busy") {
+      this.stopBusyPolling();
+      return;
+    }
+
+    this.busyPollPending = true;
+    try {
+      await this.loadActiveSession(sessionId);
+    } catch (error) {
+      this.output.appendLine(`[busy-poll] ${this.formatError(error)}`);
+    } finally {
+      this.busyPollPending = false;
+    }
+  }
+
+  private async sleep(ms: number, signal: AbortSignal) {
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+
+      const onAbort = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   private async handleEvent(event: Event) {
@@ -1180,6 +1359,7 @@ export class OpenCodeService implements vscode.Disposable {
         this.sessions = this.sessions.filter((item) => item.id !== event.properties.info.id);
         if (this.activeSessionId === event.properties.info.id) {
           this.activeSessionId = this.sessions[0]?.id;
+          this.updateBusyPolling();
           if (this.activeSessionId) {
             await this.loadActiveSession(this.activeSessionId);
           } else {
@@ -1192,10 +1372,12 @@ export class OpenCodeService implements vscode.Disposable {
       }
       case "session.status": {
         this.sessionStatuses.set(event.properties.sessionID, event.properties.status);
+        this.updateBusyPolling();
         break;
       }
       case "session.idle": {
         this.sessionStatuses.set(event.properties.sessionID, { type: "idle" });
+        this.updateBusyPolling();
         if (event.properties.sessionID === this.activeSessionId) {
           await this.loadActiveSession(event.properties.sessionID);
         }
@@ -1212,7 +1394,7 @@ export class OpenCodeService implements vscode.Disposable {
         break;
       }
       case "message.part.updated": {
-        this.upsertPart(event.properties.part);
+        this.upsertPart(event.properties.part, event.properties.delta);
         break;
       }
       case "message.part.removed": {
@@ -1254,6 +1436,7 @@ export class OpenCodeService implements vscode.Disposable {
         if (event.properties.sessionID) {
           this.sessionStatuses.set(event.properties.sessionID, { type: "idle" });
         }
+        this.updateBusyPolling();
         break;
       }
       case "session.compacted": {
@@ -1315,7 +1498,7 @@ export class OpenCodeService implements vscode.Disposable {
     ];
   }
 
-  private upsertPart(part: Part) {
+  private upsertPart(part: Part, delta?: string) {
     if (part.sessionID !== this.activeSessionId) {
       return;
     }
@@ -1327,6 +1510,30 @@ export class OpenCodeService implements vscode.Disposable {
 
     const message = this.thread[messageIndex];
     const partIndex = message.parts.findIndex((item) => item.id === part.id);
+    if (typeof delta === "string" && delta && (part.type === "text" || part.type === "reasoning")) {
+      const nextText = typeof part.text === "string" ? part.text : "";
+
+      if (partIndex === -1) {
+        if (!nextText) {
+          part = {
+            ...part,
+            text: delta,
+          };
+        }
+      } else {
+        const currentPart = message.parts[partIndex];
+        if (currentPart?.type === "text" || currentPart?.type === "reasoning") {
+          const currentText = typeof currentPart.text === "string" ? currentPart.text : "";
+          if (nextText === currentText) {
+            part = {
+              ...part,
+              text: currentText + delta,
+            };
+          }
+        }
+      }
+    }
+
     const nextParts = partIndex === -1
       ? [...message.parts, part]
       : [
@@ -1411,12 +1618,12 @@ export class OpenCodeService implements vscode.Disposable {
       `--port=${String(port)}`,
     ];
 
-    const proc = spawn(settings.opencodePath, args, {
+    const env = this.buildManagedServerEnv();
+    const command = await this.resolveOpencodeCommand(settings.opencodePath, env.PATH);
+    const proc = spawn(command, args, {
       cwd: this.currentDirectory,
-      env: {
-        ...process.env,
-      },
-      shell: process.platform === "win32",
+      env,
+      shell: process.platform === "win32" && (!this.looksLikeFilePath(command) || this.requiresWindowsShell(command)),
       stdio: "pipe",
     });
 
@@ -1505,11 +1712,287 @@ export class OpenCodeService implements vscode.Disposable {
     this.server = undefined;
   }
 
-  private formatError(error: unknown) {
-    if (error instanceof Error) {
-      return error.message;
+  private buildManagedServerEnv() {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+    };
+
+    if (process.platform === "win32") {
+      return env;
     }
-    return String(error);
+
+    const current = this.splitPathEntries(env.PATH);
+    const extras = this.getCommonBinaryDirectories();
+    for (const entry of extras) {
+      if (!current.includes(entry)) {
+        current.push(entry);
+      }
+    }
+
+    env.PATH = current.join(path.delimiter);
+    return env;
+  }
+
+  private getCommonBinaryDirectories() {
+    if (process.platform === "win32") {
+      return [];
+    }
+
+    const home = os.homedir();
+    const candidates = [
+      "/opt/homebrew/sbin",
+      "/opt/homebrew/bin",
+      "/usr/local/sbin",
+      "/usr/local/bin",
+      "/usr/sbin",
+      "/usr/bin",
+      "/snap/bin",
+      "/var/lib/snapd/snap/bin",
+      home ? path.join(home, ".local", "bin") : "",
+      home ? path.join(home, ".bun", "bin") : "",
+      home ? path.join(home, ".cargo", "bin") : "",
+      home ? path.join(home, "bin") : "",
+    ];
+
+    return candidates.filter((entry) => Boolean(entry) && fs.existsSync(entry));
+  }
+
+  private splitPathEntries(value: string | undefined) {
+    return (value ?? "")
+      .split(path.delimiter)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private looksLikeFilePath(value: string) {
+    return value.startsWith("~") || path.isAbsolute(value) || value.includes("/") || value.includes("\\");
+  }
+
+  private requiresWindowsShell(value: string) {
+    if (process.platform !== "win32") {
+      return false;
+    }
+
+    const ext = path.extname(value).toLowerCase();
+    return ext === ".cmd" || ext === ".bat";
+  }
+
+  private expandHomeDirectory(value: string) {
+    if (!value.startsWith("~")) {
+      return value;
+    }
+
+    const home = os.homedir();
+    if (!home) {
+      return value;
+    }
+
+    if (value === "~") {
+      return home;
+    }
+
+    if (value.startsWith("~/") || value.startsWith("~\\")) {
+      return path.join(home, value.slice(2));
+    }
+
+    return value;
+  }
+
+  private async resolveOpencodeCommand(configuredPath: string, envPath: string | undefined) {
+    const configured = (configuredPath || "opencode").trim() || "opencode";
+    const expanded = this.expandHomeDirectory(configured);
+
+    if (this.looksLikeFilePath(expanded)) {
+      if (await this.fileCanExecute(expanded)) {
+        return expanded;
+      }
+      throw new Error(`OpenCode executable not found at configured path: ${expanded}`);
+    }
+
+    const fromPath = await this.resolveCommandFromPath(expanded, envPath);
+    if (fromPath) {
+      return fromPath;
+    }
+
+    if (expanded === "opencode") {
+      const fromWellKnown = await this.resolveFromWellKnownLocations();
+      if (fromWellKnown) {
+        return fromWellKnown;
+      }
+    }
+
+    const fromShell = await this.resolveCommandFromLoginShell(expanded);
+    if (fromShell) {
+      return fromShell;
+    }
+
+    return expanded;
+  }
+
+  private async resolveCommandFromPath(command: string, pathValue: string | undefined) {
+    const directories = this.splitPathEntries(pathValue);
+    if (directories.length === 0) {
+      return undefined;
+    }
+
+    const hasExt = path.extname(command).length > 0;
+    const pathExtensions = process.platform === "win32"
+      ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+        .split(";")
+        .map((item) => item.trim())
+        .filter(Boolean)
+      : [];
+
+    for (const directory of directories) {
+      const base = path.join(directory, command);
+      const candidates = process.platform === "win32" && !hasExt
+        ? pathExtensions.map((ext) => `${base}${ext}`)
+        : [base];
+
+      for (const candidate of candidates) {
+        if (await this.fileCanExecute(candidate)) {
+          return candidate;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private async fileCanExecute(filePath: string) {
+    const mode = process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK;
+    try {
+      await fs.promises.access(filePath, mode);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async resolveFromWellKnownLocations() {
+    const candidates: string[] = [];
+    const home = os.homedir();
+
+    if (process.platform === "win32") {
+      if (process.env.LOCALAPPDATA) {
+        candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "opencode", "opencode.exe"));
+      }
+      if (home) {
+        candidates.push(path.join(home, "scoop", "shims", "opencode.exe"));
+      }
+    } else {
+      candidates.push(
+        "/opt/homebrew/bin/opencode",
+        "/usr/local/bin/opencode",
+        "/usr/bin/opencode",
+        "/snap/bin/opencode",
+        "/var/lib/snapd/snap/bin/opencode",
+      );
+
+      if (home) {
+        candidates.push(
+          path.join(home, ".local", "bin", "opencode"),
+          path.join(home, "bin", "opencode"),
+        );
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (await this.fileCanExecute(candidate)) {
+        return candidate;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async resolveCommandFromLoginShell(command: string) {
+    if (process.platform === "win32") {
+      return undefined;
+    }
+
+    if (!/^[A-Za-z0-9._-]+$/.test(command)) {
+      return undefined;
+    }
+
+    const shell = process.env.SHELL;
+    if (!shell) {
+      return undefined;
+    }
+
+    const located = await new Promise<string | undefined>((resolve) => {
+      const proc = spawn(shell, ["-ilc", `command -v ${command}`], {
+        env: {
+          ...process.env,
+        },
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+
+      const timeout = setTimeout(() => {
+        proc.kill();
+        resolve(undefined);
+      }, COMMAND_LOOKUP_TIMEOUT_MS);
+
+      let stdout = "";
+      proc.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      proc.on("error", () => {
+        clearTimeout(timeout);
+        resolve(undefined);
+      });
+      proc.on("exit", () => {
+        clearTimeout(timeout);
+        const candidate = stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find((line) => line.startsWith("/") || /^[A-Za-z]:[\\/]/.test(line));
+        resolve(candidate ? this.expandHomeDirectory(candidate) : undefined);
+      });
+    });
+
+    if (!located) {
+      return undefined;
+    }
+
+    if (await this.fileCanExecute(located)) {
+      return located;
+    }
+
+    return undefined;
+  }
+
+  private formatError(error: unknown) {
+    const text = error instanceof Error ? error.message : String(error);
+    if (/executable not found at configured path:/i.test(text)) {
+      return `${text}. Update opencodeVisual.opencodePath to a valid executable path.`;
+    }
+
+    if (/enoent|not recognized as an internal or external command|spawn\s+.*\s+enoent/i.test(text)) {
+      return "OpenCode CLI was not found. Install OpenCode or set opencodeVisual.opencodePath to the full executable path.";
+    }
+
+    if (/timed out while starting the opencode server/i.test(text)) {
+      return "Timed out while starting OpenCode server. Verify `opencode serve` works in a terminal and that localhost is reachable.";
+    }
+
+    return text;
+  }
+
+  private getNetworkHint(detail: string) {
+    if (/executable not found at configured path:/i.test(detail)) {
+      return "Configured OpenCode path is invalid. Update `opencodeVisual.opencodePath` to a valid executable path.";
+    }
+
+    if (/enoent|not found|not recognized as an internal or external command|spawn\s+.*\s+enoent/i.test(detail)) {
+      return "OpenCode CLI is not available to VS Code. Set `opencodeVisual.opencodePath` to the full path (for example `/opt/homebrew/bin/opencode` or `~/.local/bin/opencode`).";
+    }
+
+    if (/econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(detail.toLowerCase())) {
+      return "OpenCode server is unreachable. Check `opencodeVisual.serverBaseUrl`, then restart the local server from the command palette.";
+    }
+
+    return "OpenCode request failed. Open extension output for diagnostics.";
   }
 
   private emitState() {

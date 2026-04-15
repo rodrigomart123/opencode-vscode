@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.4 - 2026-04-15
+
+- Fixed webview startup compatibility for servers that do not expose `/global/health`, preventing false "Could not reach ..." lock screens.
+- Added local loopback fetch fallback routing (`127.0.0.1`, `localhost`, `[::1]`) to improve reliability across local bind variations.
+
+## 0.1.3 - 2026-04-15
+
+- Hardened OpenCode CLI discovery across platforms (PATH expansion, well-known install locations, and login-shell lookup) to reduce first-load failures when VS Code PATH differs from terminal.
+- Improved fetch/network diagnostics and user-facing recovery hints when OpenCode server or CLI is unreachable.
+- Improved session streaming resilience with reconnect behavior and busy-state fallback polling to avoid stuck/missing sidebar updates.
+- Fixed `opencode.localhost` remapping to follow the resolved server host/protocol/port.
+
 ## 0.1.1 - 2026-04-14
 
 - Corrected Marketplace identity metadata to publish under `rodrigomart123.opencode-for-vscode`.
