@@ -83,7 +83,7 @@ const sameWorkspace = (left: string, right: string) => {
 
 export class OpenCodeService implements vscode.Disposable {
   private readonly stateEmitter = new vscode.EventEmitter<SidebarState>();
-  private readonly output = vscode.window.createOutputChannel("OpenCode VS Code");
+  private readonly output = vscode.window.createOutputChannel("OpenCode for VSCode");
 
   private client?: OpencodeClient;
   private server?: LocalServerHandle;

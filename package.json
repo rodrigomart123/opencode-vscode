@@ -1,6 +1,6 @@
 {
   "name": "opencode-for-vscode",
-  "displayName": "OpenCode for VS Code",
+  "displayName": "OpenCode for VSCode",
   "description": "VS Code sidebar client for OpenCode sessions.",
   "version": "0.2.0",
   "publisher": "rodrigomart123",
