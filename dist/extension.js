@@ -5791,7 +5791,7 @@ var OpenCodeService = class {
     };
   }
   stateEmitter = new vscode.EventEmitter();
-  output = vscode.window.createOutputChannel("OpenCode VS Code");
+  output = vscode.window.createOutputChannel("OpenCode for VS Code");
   client;
   server;
   streamAbort;

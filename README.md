@@ -1,6 +1,6 @@
-# OpenCode VS Code
+# OpenCode for VS Code
 
-OpenCode VS Code brings OpenCode sessions into a native VS Code sidebar experience.
+OpenCode for VS Code brings OpenCode sessions into a native VS Code sidebar experience.
 
 Repository: `https://github.com/rodrigomart123/opencode-for-vscode`
 
