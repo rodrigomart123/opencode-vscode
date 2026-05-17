@@ -94,8 +94,7 @@ export class OpenCodeService implements vscode.Disposable {
   private networkNoticeUntil = 0;
   private currentDirectory?: string;
   private bootstrapPromise?: Promise<void>;
-  private serverStartPromise?: Promise<LocalServerHandle>;
-  private connectPromise?: Promise<void>;
+  private serverStartPromise?: Promise<LocalServerHandle> | null;
 
   private sessions: Session[] = [];
   private thread: ThreadEntry[] = [];
@@ -810,20 +809,6 @@ export class OpenCodeService implements vscode.Disposable {
   }
 
   private async connect(directory: string) {
-    if (this.connectPromise) {
-      await this.connectPromise;
-      return;
-    }
-
-    this.connectPromise = this.doConnect(directory);
-    try {
-      await this.connectPromise;
-    } finally {
-      this.connectPromise = undefined;
-    }
-  }
-
-  private async doConnect(directory: string) {
     this.connectionState = {
       status: "connecting",
       baseUrl: this.getSettings().serverBaseUrl,
@@ -838,7 +823,19 @@ export class OpenCodeService implements vscode.Disposable {
 
     try {
       this.client = this.createClient(baseUrl, directory);
-      await this.client.path.get(REQUEST_OPTIONS);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await this.client.path.get(REQUEST_OPTIONS);
+          break;
+        } catch (pingError) {
+          if (attempt < 2 && settings.autoStartServer) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            this.client = this.createClient(baseUrl, directory);
+            continue;
+          }
+          throw pingError;
+        }
+      }
     } catch (error) {
       if (!settings.autoStartServer) {
         this.connectionState = {
@@ -1611,7 +1608,7 @@ export class OpenCodeService implements vscode.Disposable {
     try {
       return await this.serverStartPromise;
     } finally {
-      this.serverStartPromise = undefined;
+      this.serverStartPromise = null;
     }
   }
 

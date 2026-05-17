@@ -5802,7 +5802,6 @@ var OpenCodeService = class {
   currentDirectory;
   bootstrapPromise;
   serverStartPromise;
-  connectPromise;
   sessions = [];
   thread = [];
   permissions = /* @__PURE__ */ new Map();
@@ -6403,18 +6402,6 @@ var OpenCodeService = class {
     return this.client;
   }
   async connect(directory) {
-    if (this.connectPromise) {
-      await this.connectPromise;
-      return;
-    }
-    this.connectPromise = this.doConnect(directory);
-    try {
-      await this.connectPromise;
-    } finally {
-      this.connectPromise = void 0;
-    }
-  }
-  async doConnect(directory) {
     this.connectionState = {
       status: "connecting",
       baseUrl: this.getSettings().serverBaseUrl,
@@ -6427,7 +6414,19 @@ var OpenCodeService = class {
     const baseUrl = settings.serverBaseUrl;
     try {
       this.client = this.createClient(baseUrl, directory);
-      await this.client.path.get(REQUEST_OPTIONS);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await this.client.path.get(REQUEST_OPTIONS);
+          break;
+        } catch (pingError) {
+          if (attempt < 2 && settings.autoStartServer) {
+            await new Promise((resolve2) => setTimeout(resolve2, 1500));
+            this.client = this.createClient(baseUrl, directory);
+            continue;
+          }
+          throw pingError;
+        }
+      }
     } catch (error) {
       if (!settings.autoStartServer) {
         this.connectionState = {
@@ -7082,7 +7081,7 @@ var OpenCodeService = class {
     try {
       return await this.serverStartPromise;
     } finally {
-      this.serverStartPromise = void 0;
+      this.serverStartPromise = null;
     }
   }
   async doStartManagedServer() {
