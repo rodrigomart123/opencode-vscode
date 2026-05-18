@@ -8017,6 +8017,18 @@ var storagePreload = `;(function () {
     emit(message.key, message.value)
   })
 })()`;
+function buildConnectSrc(serverUrl) {
+  try {
+    const url = new URL(serverUrl);
+    const hosts = /* @__PURE__ */ new Set();
+    hosts.add(url.origin);
+    const wsOrigin = `${url.protocol === "https:" ? "wss" : "ws"}://${url.host}`;
+    hosts.add(wsOrigin);
+    return [...hosts].join(" ");
+  } catch {
+    return "http://127.0.0.1:* ws://127.0.0.1:*";
+  }
+}
 function getWebviewHtml(webview, extensionUri, config) {
   const nonce = createNonce();
   const scriptUri = webview.asWebviewUri(vscode2.Uri.joinPath(extensionUri, "media", "app", "app.js"));
@@ -8047,17 +8059,25 @@ function getWebviewHtml(webview, extensionUri, config) {
       transition: none !important;
     }
   </style>` : "";
+  const connectSrc = `${webview.cspSource} ${buildConnectSrc(config.serverUrl)}`;
+  const markdownFixStyle = `<style nonce="${nonce}">
+    /* Fix markdown list rendering in composer preview (github.com/rodrigomart123/opencode-for-vscode/issues/6) */
+    ul { list-style-type: disc !important; padding-left: 1.5em !important; }
+    ol { list-style-type: decimal !important; padding-left: 1.5em !important; }
+    li { display: list-item !important; }
+  </style>`;
   return `<!DOCTYPE html>
 <html lang="en" style="background-color: var(--background-base)">
   <head>
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; img-src ${webview.cspSource} https: data: blob:; font-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; connect-src ${webview.cspSource} http: https: ws: wss:; worker-src ${webview.cspSource} blob:;"
+      content="default-src 'none'; img-src ${webview.cspSource} https: data: blob:; font-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; connect-src ${connectSrc}; worker-src ${webview.cspSource} blob:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="${styleUri}" rel="stylesheet" />
     ${settingsBootStyle}
+    ${markdownFixStyle}
     <script nonce="${nonce}">window.__OPENCODE_VSCODE_CONFIG__ = ${JSON.stringify(config)};</script>
     <script nonce="${nonce}">${storagePreload}</script>
     <script nonce="${nonce}">${themePreload}</script>

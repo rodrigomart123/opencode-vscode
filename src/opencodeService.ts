@@ -1,6 +1,5 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import * as fs from "node:fs";
-import * as https from "node:https";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -65,9 +64,9 @@ const ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
 const LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
 const COMMAND_LOOKUP_TIMEOUT_MS = 2500;
 
-const windowsPath = (input: string) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
+export const windowsPath = (input: string) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
 
-const workspaceKey = (directory: string) => {
+export const workspaceKey = (directory: string) => {
   const value = directory.replaceAll("\\", "/");
   const drive = value.match(/^([A-Za-z]:)\/+$/);
   if (drive) return `${drive[1]}/`;
@@ -75,7 +74,7 @@ const workspaceKey = (directory: string) => {
   return value.replace(/\/+$/, "");
 };
 
-const sameWorkspace = (left: string, right: string) => {
+export const sameWorkspace = (left: string, right: string) => {
   const a = workspaceKey(left);
   const b = workspaceKey(right);
   if (windowsPath(a) || windowsPath(b)) return a.toLowerCase() === b.toLowerCase();

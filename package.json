@@ -36,7 +36,10 @@
     "onCommand:opencodeVisual.refresh",
     "onCommand:opencodeVisual.openSettings",
     "onCommand:opencodeVisual.openTerminal",
-    "onCommand:opencodeVisual.installCli"
+    "onCommand:opencodeVisual.installCli",
+    "onCommand:opencodeVisual.explainSelection",
+    "onCommand:opencodeVisual.addSelectionToPrompt",
+    "onCommand:opencodeVisual.addFileToPrompt"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -91,6 +94,21 @@
       {
         "command": "opencodeVisual.installCli",
         "title": "OpenCode: Install CLI"
+      },
+      {
+        "command": "opencodeVisual.explainSelection",
+        "title": "OpenCode: Explain Selection",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "opencodeVisual.addSelectionToPrompt",
+        "title": "OpenCode: Add Selection to Prompt",
+        "icon": "$(add)"
+      },
+      {
+        "command": "opencodeVisual.addFileToPrompt",
+        "title": "OpenCode: Add File to Prompt",
+        "icon": "$(file-add)"
       }
     ],
     "menus": {
@@ -109,6 +127,25 @@
           "command": "opencodeVisual.openSettings",
           "when": "view == opencodeVisual.sidebar",
           "group": "navigation@9"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "opencodeVisual.explainSelection",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@5"
+        },
+        {
+          "command": "opencodeVisual.addSelectionToPrompt",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@6"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "opencodeVisual.addFileToPrompt",
+          "when": "explorerResourceIsFile",
+          "group": "2_workspace@10"
         }
       ],
       "commandPalette": [
@@ -132,6 +169,15 @@
         },
         {
           "command": "opencodeVisual.installCli"
+        },
+        {
+          "command": "opencodeVisual.explainSelection"
+        },
+        {
+          "command": "opencodeVisual.addSelectionToPrompt"
+        },
+        {
+          "command": "opencodeVisual.addFileToPrompt"
         }
       ]
     },
@@ -320,6 +366,17 @@
             ]
           },
           "description": "Per-model visibility map using keys like 'providerID/modelID' and values 'show' or 'hide'."
+        },
+        "opencodeVisual.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "description": "Minimum log level for the OpenCode output channel."
         }
       }
     }
@@ -331,7 +388,14 @@
     "watch": "npm run watch:extension",
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "vite build --watch",
-    "check": "tsc -p . --noEmit && tsc -p tsconfig.webview.json --noEmit"
+    "check": "tsc -p . --noEmit && tsc -p tsconfig.webview.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "ci": "npm run lint && npm run check && npm run test && npm run build",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",
@@ -340,10 +404,17 @@
     "@types/luxon": "^3.7.1",
     "@types/node": "^24.6.0",
     "@types/vscode": "^1.96.0",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "@vitest/coverage-v8": "^3.2.0",
     "esbuild": "^0.25.11",
+    "eslint": "^9.26.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.4",
-    "vite-plugin-solid": "^2.11.10"
+    "vite-plugin-solid": "^2.11.10",
+    "vitest": "^3.2.0"
   },
   "dependencies": {
     "@kobalte/core": "^0.13.11",
@@ -389,5 +460,11 @@
     "tailwindcss": "^4.1.11",
     "virtua": "^0.42.3",
     "zod": "^4.1.8"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "vitest run --reporter=dot"
+    ]
   }
 }
