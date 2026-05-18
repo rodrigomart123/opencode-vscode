@@ -534,7 +534,7 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode5 = __toESM(require("vscode"));
+var vscode6 = __toESM(require("vscode"));
 
 // src/opencodeService.ts
 var import_node_child_process = require("node:child_process");
@@ -5759,14 +5759,7 @@ function createOpencodeClient2(config) {
   return new OpencodeClient2({ client: client3 });
 }
 
-// src/opencodeService.ts
-var REQUEST_OPTIONS = {
-  responseStyle: "data",
-  throwOnError: true
-};
-var ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
-var LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
-var COMMAND_LOOKUP_TIMEOUT_MS = 2500;
+// src/pathUtils.ts
 var windowsPath = (input) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
 var workspaceKey = (directory) => {
   const value = directory.replaceAll("\\", "/");
@@ -5781,6 +5774,15 @@ var sameWorkspace = (left, right) => {
   if (windowsPath(a) || windowsPath(b)) return a.toLowerCase() === b.toLowerCase();
   return a === b;
 };
+
+// src/opencodeService.ts
+var REQUEST_OPTIONS = {
+  responseStyle: "data",
+  throwOnError: true
+};
+var ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
+var LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
+var COMMAND_LOOKUP_TIMEOUT_MS = 2500;
 var OpenCodeService = class {
   constructor(context) {
     this.context = context;
@@ -5820,6 +5822,9 @@ var OpenCodeService = class {
   composer = {};
   connectionState;
   onDidChangeState = this.stateEmitter.event;
+  logOutput(message) {
+    this.output.appendLine(message);
+  }
   dispose() {
     this.stopStream();
     this.stopBusyPolling();
@@ -5927,11 +5932,11 @@ var OpenCodeService = class {
     return false;
   }
   getState() {
-    const workspace5 = this.getWorkspaceContext();
+    const workspace6 = this.getWorkspaceContext();
     return {
       connection: this.connectionState,
       lastError: this.lastError,
-      workspace: workspace5,
+      workspace: workspace6,
       sessions: this.sessions,
       sessionStatuses: Object.fromEntries(this.sessionStatuses.entries()),
       activeSessionId: this.activeSessionId,
@@ -6361,8 +6366,8 @@ var OpenCodeService = class {
     return this.thread.at(-1);
   }
   async ensureReady(forceRefresh = false, forceRestartServer = false) {
-    const workspace5 = this.getWorkspaceContext();
-    const directory = workspace5.directory;
+    const workspace6 = this.getWorkspaceContext();
+    const directory = workspace6.directory;
     this.connectionState = {
       ...this.connectionState,
       baseUrl: this.getSettings().serverBaseUrl
@@ -6485,8 +6490,14 @@ var OpenCodeService = class {
       v2Client.app.agents({ directory }, REQUEST_OPTIONS),
       client3.command.list(REQUEST_OPTIONS),
       client3.config.get(REQUEST_OPTIONS),
-      v2Client.vcs.get({ directory }, REQUEST_OPTIONS).catch(() => void 0),
-      v2Client.project.current({ directory }, REQUEST_OPTIONS).catch(() => void 0)
+      v2Client.vcs.get({ directory }, REQUEST_OPTIONS).catch((error) => {
+        this.output.appendLine(`[refreshState] VCS info unavailable: ${this.formatError(error)}`);
+        return void 0;
+      }),
+      v2Client.project.current({ directory }, REQUEST_OPTIONS).catch((error) => {
+        this.output.appendLine(`[refreshState] Project info unavailable: ${this.formatError(error)}`);
+        return void 0;
+      })
     ]);
     const sessions = this.unwrap(sessionsResult);
     const statuses = this.unwrap(statusesResult);
@@ -7573,7 +7584,7 @@ var OpenCodeService = class {
       },
       async (progress) => {
         try {
-          progress.report({ message: "Installing via npm..." });
+          progress.report({ message: "Running npm install -g opencode-ai (this may take a minute)..." });
           this.output.appendLine("[install] Installing opencode-ai via npm...");
           const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
           const result = await this.runCommand(npmCommand, ["install", "-g", "opencode-ai"], {
@@ -7584,7 +7595,7 @@ var OpenCodeService = class {
             throw new Error(`npm install failed: ${result.stderr || result.stdout}`);
           }
           this.output.appendLine("[install] npm install completed successfully");
-          progress.report({ message: "Verifying installation..." });
+          progress.report({ message: "Verifying CLI is available in PATH..." });
           const available = await this.isCliAvailable();
           if (!available) {
             const npmBin = await this.getNpmGlobalBin();
@@ -7689,7 +7700,7 @@ var OpenCodeService = class {
 
 // src/sidebarProvider.ts
 var path2 = __toESM(require("node:path"));
-var vscode3 = __toESM(require("vscode"));
+var vscode4 = __toESM(require("vscode"));
 
 // src/webviewHtml.ts
 var vscode2 = __toESM(require("vscode"));
@@ -8118,16 +8129,256 @@ var WebviewStorageBridge = class {
 };
 var storageBridge = new WebviewStorageBridge();
 
+// src/webviewHostUtils.ts
+var vscode3 = __toESM(require("vscode"));
+function getNativeSettings() {
+  const config = vscode3.workspace.getConfiguration("opencodeVisual");
+  return {
+    language: config.get("language", "auto"),
+    uiColorScheme: config.get("uiColorScheme", "system"),
+    themeId: config.get("themeId", "oc-2"),
+    uiFont: config.get("uiFont", ""),
+    codeFont: config.get("codeFont", ""),
+    autoSave: config.get("autoSave", true),
+    fontSize: config.get("fontSize", 14),
+    showReasoningSummaries: config.get("showReasoningSummaries", false),
+    shellToolPartsExpanded: config.get("shellToolPartsExpanded", false),
+    editToolPartsExpanded: config.get("editToolPartsExpanded", false),
+    releaseNotes: config.get("releaseNotes", true),
+    checkUpdatesOnStartup: config.get("checkUpdatesOnStartup", true),
+    notifyAgent: config.get("notifyAgent", true),
+    notifyPermissions: config.get("notifyPermissions", true),
+    notifyErrors: config.get("notifyErrors", false),
+    soundAgentEnabled: config.get("soundAgentEnabled", true),
+    soundAgent: config.get("soundAgent", "staplebops-01"),
+    soundPermissionsEnabled: config.get("soundPermissionsEnabled", true),
+    soundPermissions: config.get("soundPermissions", "staplebops-02"),
+    soundErrorsEnabled: config.get("soundErrorsEnabled", true),
+    soundErrors: config.get("soundErrors", "nope-03"),
+    autoAcceptWorkspacePermissions: config.get("autoAcceptWorkspacePermissions", false),
+    customKeybinds: config.get("customKeybinds", null),
+    modelVisibility: config.get("modelVisibility", null)
+  };
+}
+function getExtensionSettings() {
+  const config = vscode3.workspace.getConfiguration("opencodeVisual");
+  return {
+    opencodePath: config.get("opencodePath", "opencode"),
+    serverBaseUrl: config.get("serverBaseUrl", "http://127.0.0.1:4096"),
+    autoStartServer: config.get("autoStartServer", true),
+    debugServerLogs: config.get("debugServerLogs", false)
+  };
+}
+async function setExtensionSetting(key, value) {
+  const config = vscode3.workspace.getConfiguration("opencodeVisual");
+  if ((key === "opencodePath" || key === "serverBaseUrl") && typeof value !== "string") {
+    throw new Error(`Invalid value for ${key}`);
+  }
+  if ((key === "autoStartServer" || key === "debugServerLogs") && typeof value !== "boolean") {
+    throw new Error(`Invalid value for ${key}`);
+  }
+  await config.update(key, value, vscode3.ConfigurationTarget.Global);
+  return getExtensionSettings();
+}
+async function shouldDisableHealthCheck(serverUrl) {
+  let target;
+  try {
+    target = new URL("/global/health", serverUrl).toString();
+  } catch {
+    return true;
+  }
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2500);
+  try {
+    const response = await fetch(target, {
+      method: "GET",
+      signal: abort.signal
+    });
+    if (response.status === 404 || response.status === 405 || response.status === 501) {
+      return true;
+    }
+    if (response.ok) {
+      return false;
+    }
+    const text = await response.text().catch(() => "");
+    if (/not found|unknown route|cannot\s+\w+\s+\/global\/health/i.test(text)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function getColorScheme() {
+  const kind = vscode3.window.activeColorTheme.kind;
+  if (kind === vscode3.ColorThemeKind.Light || kind === vscode3.ColorThemeKind.HighContrastLight) {
+    return "light";
+  }
+  return "dark";
+}
+function resolveFetchUrl(input, service) {
+  try {
+    const url = new URL(input);
+    if (url.hostname === "opencode.localhost") {
+      const base = service.getResolvedServerBaseUrl();
+      try {
+        const target = new URL(base);
+        url.protocol = target.protocol;
+        url.hostname = target.hostname;
+        url.port = target.port;
+      } catch {
+        url.hostname = "127.0.0.1";
+      }
+    }
+    return url.toString();
+  } catch {
+    return input;
+  }
+}
+function isLocalHostname(hostname) {
+  const normalized = hostname.toLowerCase();
+  return normalized === "opencode.localhost" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+function buildFetchCandidates(input, service) {
+  const primary = resolveFetchUrl(input, service);
+  try {
+    const url = new URL(primary);
+    if (!isLocalHostname(url.hostname)) {
+      return [primary];
+    }
+    const candidates = [url.toString()];
+    for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
+      const candidate = new URL(url.toString());
+      candidate.hostname = host;
+      const value = candidate.toString();
+      if (!candidates.includes(value)) {
+        candidates.push(value);
+      }
+    }
+    return candidates;
+  } catch {
+    return [primary];
+  }
+}
+function isNetworkFailure(error) {
+  const text = error instanceof Error ? error.message : String(error);
+  return /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(
+    text
+  );
+}
+async function handleFetch(message, service, fetches, postMessage) {
+  const abort = new AbortController();
+  fetches.set(message.requestId, abort);
+  try {
+    let response;
+    let finalUrl = resolveFetchUrl(message.url, service);
+    let lastError;
+    for (const candidateUrl of buildFetchCandidates(message.url, service)) {
+      finalUrl = candidateUrl;
+      try {
+        response = await fetch(candidateUrl, {
+          method: message.method,
+          headers: message.headers,
+          body: message.body ? Buffer.from(message.body, "base64") : void 0,
+          signal: abort.signal
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (abort.signal.aborted || !isNetworkFailure(error)) {
+          throw error;
+        }
+      }
+    }
+    if (!response) {
+      throw lastError ?? new Error(`Failed to fetch ${finalUrl}`);
+    }
+    postMessage({
+      type: "fetchResponse",
+      requestId: message.requestId,
+      url: response.url,
+      status: response.status,
+      statusText: response.statusText,
+      headers: [...response.headers.entries()]
+    });
+    const reader = response.body?.getReader();
+    if (!reader) {
+      postMessage({ type: "fetchEnd", requestId: message.requestId });
+      return;
+    }
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+      postMessage({
+        type: "fetchChunk",
+        requestId: message.requestId,
+        chunk: Buffer.from(result.value).toString("base64")
+      });
+    }
+    postMessage({ type: "fetchEnd", requestId: message.requestId });
+  } catch (error) {
+    if (!abort.signal.aborted) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      const errorName = error instanceof Error ? error.name : void 0;
+      postMessage({
+        type: "fetchError",
+        requestId: message.requestId,
+        message: messageText,
+        name: errorName
+      });
+      const urls = buildFetchCandidates(message.url, service);
+      const detail = `method=${message.method} urls=${urls.join(",")} error=${errorName ?? "Error"}: ${messageText}`;
+      service.reportNetworkIssue(detail);
+    }
+  } finally {
+    fetches.delete(message.requestId);
+  }
+}
+async function pickDirectory(requestId, title, multiple, postMessage) {
+  try {
+    const result = await vscode3.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: multiple,
+      openLabel: title || "Select folder"
+    });
+    if (!result || result.length === 0) {
+      postMessage({
+        type: "pickDirectoryResult",
+        requestId,
+        value: null
+      });
+      return;
+    }
+    const paths = result.map((uri) => uri.fsPath);
+    postMessage({
+      type: "pickDirectoryResult",
+      requestId,
+      value: multiple ? paths : paths[0]
+    });
+  } catch {
+    postMessage({
+      type: "pickDirectoryResult",
+      requestId,
+      value: null
+    });
+  }
+}
+
 // src/sidebarProvider.ts
 var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
   constructor(context, service) {
     this.context = context;
     this.service = service;
     this.disposables.push(
-      vscode3.workspace.registerTextDocumentContentProvider(_OpenCodeSidebarProvider.diffScheme, {
+      vscode4.workspace.registerTextDocumentContentProvider(_OpenCodeSidebarProvider.diffScheme, {
         provideTextDocumentContent: (uri) => this.diffContent.get(uri.toString()) ?? ""
       }),
-      vscode3.workspace.onDidCloseTextDocument((document) => {
+      vscode4.workspace.onDidCloseTextDocument((document) => {
         if (document.uri.scheme !== _OpenCodeSidebarProvider.diffScheme) {
           return;
         }
@@ -8147,37 +8398,17 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
   stop = storageBridge.register("sidebar", (message) => this.postMessage(message));
   dispose() {
     this.stop();
-    vscode3.Disposable.from(...this.disposables).dispose();
+    vscode4.Disposable.from(...this.disposables).dispose();
   }
   async reveal() {
-    await vscode3.commands.executeCommand("workbench.view.extension.opencodeVisual");
+    await vscode4.commands.executeCommand("workbench.view.extension.opencodeVisual");
     this.view?.show?.(true);
   }
   async reload() {
     await this.render();
   }
   async openSettings() {
-    await vscode3.commands.executeCommand("opencodeVisual.openSettings");
-  }
-  getExtensionSettings() {
-    const config = vscode3.workspace.getConfiguration("opencodeVisual");
-    return {
-      opencodePath: config.get("opencodePath", "opencode"),
-      serverBaseUrl: config.get("serverBaseUrl", "http://127.0.0.1:4096"),
-      autoStartServer: config.get("autoStartServer", true),
-      debugServerLogs: config.get("debugServerLogs", false)
-    };
-  }
-  async setExtensionSetting(key, value) {
-    const config = vscode3.workspace.getConfiguration("opencodeVisual");
-    if ((key === "opencodePath" || key === "serverBaseUrl") && typeof value !== "string") {
-      throw new Error(`Invalid value for ${key}`);
-    }
-    if ((key === "autoStartServer" || key === "debugServerLogs") && typeof value !== "boolean") {
-      throw new Error(`Invalid value for ${key}`);
-    }
-    await config.update(key, value, vscode3.ConfigurationTarget.Global);
-    return this.getExtensionSettings();
+    await vscode4.commands.executeCommand("opencodeVisual.openSettings");
   }
   dispatchAction(action) {
     this.postMessage({ type: "hostAction", action });
@@ -8185,7 +8416,7 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
   notifyTheme() {
     this.postMessage({
       type: "hostTheme",
-      colorScheme: this.getColorScheme()
+      colorScheme: getColorScheme()
     });
   }
   async resolveWebviewView(webviewView) {
@@ -8193,7 +8424,7 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
     this.ready = false;
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode3.Uri.joinPath(this.context.extensionUri, "media")]
+      localResourceRoots: [vscode4.Uri.joinPath(this.context.extensionUri, "media")]
     };
     const receiveDisposable = webviewView.webview.onDidReceiveMessage(async (message) => {
       await this.handleMessage(message);
@@ -8215,7 +8446,11 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
         return;
       }
       if (message.type === "openLink") {
-        await vscode3.env.openExternal(vscode3.Uri.parse(message.url));
+        await vscode4.env.openExternal(vscode4.Uri.parse(message.url));
+        return;
+      }
+      if (message.type === "openFile") {
+        await this.openFile(message.filePath, message.range);
         return;
       }
       if (message.type === "openDiff") {
@@ -8227,11 +8462,7 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
         return;
       }
       if (message.type === "pickDirectory") {
-        this.postMessage({
-          type: "pickDirectoryResult",
-          requestId: message.requestId,
-          value: null
-        });
+        await pickDirectory(message.requestId, message.title, message.multiple, (msg) => this.postMessage(msg));
         return;
       }
       if (message.type === "fetchAbort") {
@@ -8240,20 +8471,20 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
         return;
       }
       if (message.type === "fetchRequest") {
-        await this.handleFetch(message);
+        await handleFetch(message, this.service, this.fetches, (msg) => this.postMessage(msg));
         return;
       }
       if (message.type === "getExtensionSettings") {
         this.postMessage({
           type: "extensionSettingsResult",
           requestId: message.requestId,
-          value: this.getExtensionSettings()
+          value: getExtensionSettings()
         });
         return;
       }
       if (message.type === "setExtensionSetting") {
         try {
-          const value = await this.setExtensionSetting(message.key, message.value);
+          const value = await setExtensionSetting(message.key, message.value);
           this.postMessage({
             type: "extensionSettingResult",
             requestId: message.requestId,
@@ -8276,7 +8507,7 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
       }
       if (message.type === "restartServer") {
         try {
-          await vscode3.commands.executeCommand("opencodeVisual.restartServer");
+          await vscode4.commands.executeCommand("opencodeVisual.restartServer");
           this.postMessage({
             type: "restartServerResult",
             requestId: message.requestId
@@ -8294,7 +8525,7 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
       return;
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
-      vscode3.window.showErrorMessage(messageText);
+      vscode4.window.showErrorMessage(messageText);
     }
   }
   async render() {
@@ -8306,8 +8537,9 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
     let serverUrl = this.service.getResolvedServerBaseUrl();
     try {
       serverUrl = await this.service.ensureServerReady();
-      disableHealthCheck = await this.shouldDisableHealthCheck(serverUrl);
-    } catch {
+      disableHealthCheck = await shouldDisableHealthCheck(serverUrl);
+    } catch (error) {
+      this.service.logOutput(`[render] Server not ready: ${error instanceof Error ? error.message : String(error)}`);
       disableHealthCheck = true;
       serverUrl = this.service.getResolvedServerBaseUrl();
     }
@@ -8316,92 +8548,25 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
       serverUrl,
       version: String(this.context.extension.packageJSON.version ?? "0.0.0"),
       workspaceDirectory,
-      colorScheme: this.getColorScheme(),
+      colorScheme: getColorScheme(),
       disableHealthCheck,
       sharedStorage: storageBridge.snapshot(),
-      nativeSettings: this.getNativeSettings()
+      nativeSettings: getNativeSettings()
     });
-  }
-  getNativeSettings() {
-    const config = vscode3.workspace.getConfiguration("opencodeVisual");
-    return {
-      language: config.get("language", "auto"),
-      uiColorScheme: config.get("uiColorScheme", "system"),
-      themeId: config.get("themeId", "oc-2"),
-      uiFont: config.get("uiFont", ""),
-      codeFont: config.get("codeFont", ""),
-      autoSave: config.get("autoSave", true),
-      fontSize: config.get("fontSize", 14),
-      showReasoningSummaries: config.get("showReasoningSummaries", false),
-      shellToolPartsExpanded: config.get("shellToolPartsExpanded", false),
-      editToolPartsExpanded: config.get("editToolPartsExpanded", false),
-      releaseNotes: config.get("releaseNotes", true),
-      checkUpdatesOnStartup: config.get("checkUpdatesOnStartup", true),
-      notifyAgent: config.get("notifyAgent", true),
-      notifyPermissions: config.get("notifyPermissions", true),
-      notifyErrors: config.get("notifyErrors", false),
-      soundAgentEnabled: config.get("soundAgentEnabled", true),
-      soundAgent: config.get("soundAgent", "staplebops-01"),
-      soundPermissionsEnabled: config.get("soundPermissionsEnabled", true),
-      soundPermissions: config.get("soundPermissions", "staplebops-02"),
-      soundErrorsEnabled: config.get("soundErrorsEnabled", true),
-      soundErrors: config.get("soundErrors", "nope-03"),
-      autoAcceptWorkspacePermissions: config.get("autoAcceptWorkspacePermissions", false),
-      customKeybinds: config.get("customKeybinds", null),
-      modelVisibility: config.get("modelVisibility", null)
-    };
-  }
-  async shouldDisableHealthCheck(serverUrl) {
-    let target;
-    try {
-      target = new URL("/global/health", serverUrl).toString();
-    } catch {
-      return true;
-    }
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 2500);
-    try {
-      const response = await fetch(target, {
-        method: "GET",
-        signal: abort.signal
-      });
-      if (response.status === 404 || response.status === 405 || response.status === 501) {
-        return true;
-      }
-      if (response.ok) {
-        return false;
-      }
-      const text = await response.text().catch(() => "");
-      if (/not found|unknown route|cannot\s+\w+\s+\/global\/health/i.test(text)) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  getColorScheme() {
-    const kind = vscode3.window.activeColorTheme.kind;
-    if (kind === vscode3.ColorThemeKind.Light || kind === vscode3.ColorThemeKind.HighContrastLight) {
-      return "light";
-    }
-    return "dark";
   }
   async openFile(filePath, range) {
     const baseDirectory = this.service.getActiveSessionDirectory();
     const targetPath = path2.isAbsolute(filePath) ? filePath : path2.join(baseDirectory ?? "", filePath);
-    const uri = vscode3.Uri.file(targetPath);
-    const document = await vscode3.workspace.openTextDocument(uri);
-    const editor = await vscode3.window.showTextDocument(document, { preview: false });
+    const uri = vscode4.Uri.file(targetPath);
+    const document = await vscode4.workspace.openTextDocument(uri);
+    const editor = await vscode4.window.showTextDocument(document, { preview: false });
     if (range) {
-      const selection = new vscode3.Selection(
-        new vscode3.Position(range.startLine, range.startCharacter),
-        new vscode3.Position(range.endLine, range.endCharacter)
+      const selection = new vscode4.Selection(
+        new vscode4.Position(range.startLine, range.startCharacter),
+        new vscode4.Position(range.endLine, range.endCharacter)
       );
       editor.selection = selection;
-      editor.revealRange(selection, vscode3.TextEditorRevealType.InCenter);
+      editor.revealRange(selection, vscode4.TextEditorRevealType.InCenter);
     }
   }
   async openDiff(filePath, before, after) {
@@ -8409,11 +8574,11 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
     const left = this.createDiffUri(filePath, "before", before, id);
     const right = this.createDiffUri(filePath, "after", after, id);
     const title = `OpenCode Diff: ${filePath}`;
-    await vscode3.commands.executeCommand("vscode.diff", left, right, title, { preview: false });
+    await vscode4.commands.executeCommand("vscode.diff", left, right, title, { preview: false });
   }
   createDiffUri(filePath, side, content, id) {
     const normalized = filePath.replaceAll("\\", "/").replace(/^\/+/, "") || "untitled";
-    const uri = vscode3.Uri.from({
+    const uri = vscode4.Uri.from({
       scheme: _OpenCodeSidebarProvider.diffScheme,
       path: `/${side}/${id}/${normalized}`
     });
@@ -8446,128 +8611,10 @@ var OpenCodeSidebarProvider = class _OpenCodeSidebarProvider {
     }
     void this.view.webview.postMessage(message);
   }
-  resolveFetchUrl(input) {
-    try {
-      const url = new URL(input);
-      if (url.hostname === "opencode.localhost") {
-        const base = this.service.getResolvedServerBaseUrl();
-        try {
-          const target = new URL(base);
-          url.protocol = target.protocol;
-          url.hostname = target.hostname;
-          url.port = target.port;
-        } catch {
-          url.hostname = "127.0.0.1";
-        }
-      }
-      return url.toString();
-    } catch {
-      return input;
-    }
-  }
-  isLocalHostname(hostname) {
-    const normalized = hostname.toLowerCase();
-    return normalized === "opencode.localhost" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
-  }
-  buildFetchCandidates(input) {
-    const primary = this.resolveFetchUrl(input);
-    try {
-      const url = new URL(primary);
-      if (!this.isLocalHostname(url.hostname)) {
-        return [primary];
-      }
-      const candidates = [url.toString()];
-      for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
-        const candidate = new URL(url.toString());
-        candidate.hostname = host;
-        const value = candidate.toString();
-        if (!candidates.includes(value)) {
-          candidates.push(value);
-        }
-      }
-      return candidates;
-    } catch {
-      return [primary];
-    }
-  }
-  isNetworkFailure(error) {
-    const text = error instanceof Error ? error.message : String(error);
-    return /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(text);
-  }
-  async handleFetch(message) {
-    const abort = new AbortController();
-    this.fetches.set(message.requestId, abort);
-    try {
-      let response;
-      let finalUrl = this.resolveFetchUrl(message.url);
-      let lastError;
-      for (const candidateUrl of this.buildFetchCandidates(message.url)) {
-        finalUrl = candidateUrl;
-        try {
-          response = await fetch(candidateUrl, {
-            method: message.method,
-            headers: message.headers,
-            body: message.body ? Buffer.from(message.body, "base64") : void 0,
-            signal: abort.signal
-          });
-          break;
-        } catch (error) {
-          lastError = error;
-          if (abort.signal.aborted || !this.isNetworkFailure(error)) {
-            throw error;
-          }
-        }
-      }
-      if (!response) {
-        throw lastError ?? new Error(`Failed to fetch ${finalUrl}`);
-      }
-      this.postMessage({
-        type: "fetchResponse",
-        requestId: message.requestId,
-        url: response.url,
-        status: response.status,
-        statusText: response.statusText,
-        headers: [...response.headers.entries()]
-      });
-      const reader = response.body?.getReader();
-      if (!reader) {
-        this.postMessage({ type: "fetchEnd", requestId: message.requestId });
-        return;
-      }
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-        this.postMessage({
-          type: "fetchChunk",
-          requestId: message.requestId,
-          chunk: Buffer.from(result.value).toString("base64")
-        });
-      }
-      this.postMessage({ type: "fetchEnd", requestId: message.requestId });
-    } catch (error) {
-      if (!abort.signal.aborted) {
-        const messageText = error instanceof Error ? error.message : String(error);
-        const errorName = error instanceof Error ? error.name : void 0;
-        this.postMessage({
-          type: "fetchError",
-          requestId: message.requestId,
-          message: messageText,
-          name: errorName
-        });
-        const urls = this.buildFetchCandidates(message.url);
-        const detail = `method=${message.method} urls=${urls.join(",")} error=${errorName ?? "Error"}: ${messageText}`;
-        this.service.reportNetworkIssue(detail);
-      }
-    } finally {
-      this.fetches.delete(message.requestId);
-    }
-  }
 };
 
 // src/settingsPanel.ts
-var vscode4 = __toESM(require("vscode"));
+var vscode5 = __toESM(require("vscode"));
 var OpenCodeSettingsPanel = class {
   constructor(context, service) {
     this.context = context;
@@ -8594,7 +8641,7 @@ var OpenCodeSettingsPanel = class {
       return;
     }
     try {
-      this.panel.reveal(vscode4.ViewColumn.Active, false);
+      this.panel.reveal(vscode5.ViewColumn.Active, false);
       await this.render();
     } catch {
       this.panel = void 0;
@@ -8623,21 +8670,21 @@ var OpenCodeSettingsPanel = class {
     }
     this.postMessage({
       type: "hostTheme",
-      colorScheme: this.getColorScheme()
+      colorScheme: getColorScheme()
     });
   }
   async createPanel() {
-    const panel = vscode4.window.createWebviewPanel(
+    const panel = vscode5.window.createWebviewPanel(
       "opencodeVisual.settings",
       "OpenCode Settings",
       {
-        viewColumn: vscode4.ViewColumn.Active,
+        viewColumn: vscode5.ViewColumn.Active,
         preserveFocus: false
       },
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode4.Uri.joinPath(this.context.extensionUri, "media")]
+        localResourceRoots: [vscode5.Uri.joinPath(this.context.extensionUri, "media")]
       }
     );
     this.panel = panel;
@@ -8670,7 +8717,7 @@ var OpenCodeSettingsPanel = class {
       abort.abort();
     }
     this.fetches.clear();
-    vscode4.Disposable.from(...this.panelDisposables).dispose();
+    vscode5.Disposable.from(...this.panelDisposables).dispose();
     this.panelDisposables = [];
   }
   isDisposedError(error) {
@@ -8690,7 +8737,7 @@ var OpenCodeSettingsPanel = class {
         return;
       }
       if (message.type === "openLink") {
-        await vscode4.env.openExternal(vscode4.Uri.parse(message.url));
+        await vscode5.env.openExternal(vscode5.Uri.parse(message.url));
         return;
       }
       if (message.type === "openDiff") {
@@ -8702,11 +8749,7 @@ var OpenCodeSettingsPanel = class {
         return;
       }
       if (message.type === "pickDirectory") {
-        this.postMessage({
-          type: "pickDirectoryResult",
-          requestId: message.requestId,
-          value: null
-        });
+        await pickDirectory(message.requestId, message.title, message.multiple, (msg) => this.postMessage(msg));
         return;
       }
       if (message.type === "fetchAbort") {
@@ -8715,20 +8758,20 @@ var OpenCodeSettingsPanel = class {
         return;
       }
       if (message.type === "fetchRequest") {
-        await this.handleFetch(message);
+        await handleFetch(message, this.service, this.fetches, (msg) => this.postMessage(msg));
         return;
       }
       if (message.type === "getExtensionSettings") {
         this.postMessage({
           type: "extensionSettingsResult",
           requestId: message.requestId,
-          value: this.getExtensionSettings()
+          value: getExtensionSettings()
         });
         return;
       }
       if (message.type === "setExtensionSetting") {
         try {
-          const value = await this.setExtensionSetting(message.key, message.value);
+          const value = await setExtensionSetting(message.key, message.value);
           this.postMessage({
             type: "extensionSettingResult",
             requestId: message.requestId,
@@ -8751,7 +8794,7 @@ var OpenCodeSettingsPanel = class {
       }
       if (message.type === "restartServer") {
         try {
-          await vscode4.commands.executeCommand("opencodeVisual.restartServer");
+          await vscode5.commands.executeCommand("opencodeVisual.restartServer");
           this.postMessage({
             type: "restartServerResult",
             requestId: message.requestId
@@ -8768,7 +8811,7 @@ var OpenCodeSettingsPanel = class {
       }
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
-      void vscode4.window.showErrorMessage(messageText);
+      void vscode5.window.showErrorMessage(messageText);
     }
   }
   async render() {
@@ -8781,8 +8824,9 @@ var OpenCodeSettingsPanel = class {
     let serverUrl = this.service.getResolvedServerBaseUrl();
     try {
       serverUrl = await this.service.ensureServerReady();
-      disableHealthCheck = await this.shouldDisableHealthCheck(serverUrl);
-    } catch {
+      disableHealthCheck = await shouldDisableHealthCheck(serverUrl);
+    } catch (error) {
+      this.service.logOutput(`[render] Server not ready: ${error instanceof Error ? error.message : String(error)}`);
       disableHealthCheck = true;
       serverUrl = this.service.getResolvedServerBaseUrl();
     }
@@ -8795,11 +8839,11 @@ var OpenCodeSettingsPanel = class {
         serverUrl,
         version: String(this.context.extension.packageJSON.version ?? "0.0.0"),
         workspaceDirectory,
-        colorScheme: this.getColorScheme(),
+        colorScheme: getColorScheme(),
         disableHealthCheck,
         settingsMode: true,
         sharedStorage: storageBridge.snapshot(),
-        nativeSettings: this.getNativeSettings()
+        nativeSettings: getNativeSettings()
       });
     } catch (error) {
       if (this.isDisposedError(error)) {
@@ -8809,98 +8853,11 @@ var OpenCodeSettingsPanel = class {
       throw error;
     }
   }
-  getNativeSettings() {
-    const config = vscode4.workspace.getConfiguration("opencodeVisual");
-    return {
-      language: config.get("language", "auto"),
-      uiColorScheme: config.get("uiColorScheme", "system"),
-      themeId: config.get("themeId", "oc-2"),
-      uiFont: config.get("uiFont", ""),
-      codeFont: config.get("codeFont", ""),
-      autoSave: config.get("autoSave", true),
-      fontSize: config.get("fontSize", 14),
-      showReasoningSummaries: config.get("showReasoningSummaries", false),
-      shellToolPartsExpanded: config.get("shellToolPartsExpanded", false),
-      editToolPartsExpanded: config.get("editToolPartsExpanded", false),
-      releaseNotes: config.get("releaseNotes", true),
-      checkUpdatesOnStartup: config.get("checkUpdatesOnStartup", true),
-      notifyAgent: config.get("notifyAgent", true),
-      notifyPermissions: config.get("notifyPermissions", true),
-      notifyErrors: config.get("notifyErrors", false),
-      soundAgentEnabled: config.get("soundAgentEnabled", true),
-      soundAgent: config.get("soundAgent", "staplebops-01"),
-      soundPermissionsEnabled: config.get("soundPermissionsEnabled", true),
-      soundPermissions: config.get("soundPermissions", "staplebops-02"),
-      soundErrorsEnabled: config.get("soundErrorsEnabled", true),
-      soundErrors: config.get("soundErrors", "nope-03"),
-      autoAcceptWorkspacePermissions: config.get("autoAcceptWorkspacePermissions", false),
-      customKeybinds: config.get("customKeybinds", null),
-      modelVisibility: config.get("modelVisibility", null)
-    };
-  }
-  getExtensionSettings() {
-    const config = vscode4.workspace.getConfiguration("opencodeVisual");
-    return {
-      opencodePath: config.get("opencodePath", "opencode"),
-      serverBaseUrl: config.get("serverBaseUrl", "http://127.0.0.1:4096"),
-      autoStartServer: config.get("autoStartServer", true),
-      debugServerLogs: config.get("debugServerLogs", false)
-    };
-  }
-  async setExtensionSetting(key, value) {
-    const config = vscode4.workspace.getConfiguration("opencodeVisual");
-    if ((key === "opencodePath" || key === "serverBaseUrl") && typeof value !== "string") {
-      throw new Error(`Invalid value for ${key}`);
-    }
-    if ((key === "autoStartServer" || key === "debugServerLogs") && typeof value !== "boolean") {
-      throw new Error(`Invalid value for ${key}`);
-    }
-    await config.update(key, value, vscode4.ConfigurationTarget.Global);
-    return this.getExtensionSettings();
-  }
-  async shouldDisableHealthCheck(serverUrl) {
-    let target;
-    try {
-      target = new URL("/global/health", serverUrl).toString();
-    } catch {
-      return true;
-    }
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 2500);
-    try {
-      const response = await fetch(target, {
-        method: "GET",
-        signal: abort.signal
-      });
-      if (response.status === 404 || response.status === 405 || response.status === 501) {
-        return true;
-      }
-      if (response.ok) {
-        return false;
-      }
-      const text = await response.text().catch(() => "");
-      if (/not found|unknown route|cannot\s+\w+\s+\/global\/health/i.test(text)) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  getColorScheme() {
-    const kind = vscode4.window.activeColorTheme.kind;
-    if (kind === vscode4.ColorThemeKind.Light || kind === vscode4.ColorThemeKind.HighContrastLight) {
-      return "light";
-    }
-    return "dark";
-  }
   async openDiff(filePath, before, after) {
-    const left = await vscode4.workspace.openTextDocument({ content: before });
-    const right = await vscode4.workspace.openTextDocument({ content: after });
+    const left = await vscode5.workspace.openTextDocument({ content: before });
+    const right = await vscode5.workspace.openTextDocument({ content: after });
     const title = `OpenCode Diff: ${filePath}`;
-    await vscode4.commands.executeCommand("vscode.diff", left.uri, right.uri, title, { preview: false });
+    await vscode5.commands.executeCommand("vscode.diff", left.uri, right.uri, title, { preview: false });
   }
   dispatchAction(action) {
     this.postMessage({
@@ -8937,130 +8894,12 @@ var OpenCodeSettingsPanel = class {
           return;
         }
         const text = error instanceof Error ? error.message : String(error);
-        void vscode4.window.showErrorMessage(text);
+        void vscode5.window.showErrorMessage(text);
       });
     } catch (error) {
       if (this.isDisposedError(error)) {
         this.resetDisposedPanel();
       }
-    }
-  }
-  resolveFetchUrl(input) {
-    try {
-      const url = new URL(input);
-      if (url.hostname === "opencode.localhost") {
-        const base = this.service.getResolvedServerBaseUrl();
-        try {
-          const target = new URL(base);
-          url.protocol = target.protocol;
-          url.hostname = target.hostname;
-          url.port = target.port;
-        } catch {
-          url.hostname = "127.0.0.1";
-        }
-      }
-      return url.toString();
-    } catch {
-      return input;
-    }
-  }
-  isLocalHostname(hostname) {
-    const normalized = hostname.toLowerCase();
-    return normalized === "opencode.localhost" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
-  }
-  buildFetchCandidates(input) {
-    const primary = this.resolveFetchUrl(input);
-    try {
-      const url = new URL(primary);
-      if (!this.isLocalHostname(url.hostname)) {
-        return [primary];
-      }
-      const candidates = [url.toString()];
-      for (const host of ["127.0.0.1", "localhost", "[::1]"]) {
-        const candidate = new URL(url.toString());
-        candidate.hostname = host;
-        const value = candidate.toString();
-        if (!candidates.includes(value)) {
-          candidates.push(value);
-        }
-      }
-      return candidates;
-    } catch {
-      return [primary];
-    }
-  }
-  isNetworkFailure(error) {
-    const text = error instanceof Error ? error.message : String(error);
-    return /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(text);
-  }
-  async handleFetch(message) {
-    const abort = new AbortController();
-    this.fetches.set(message.requestId, abort);
-    try {
-      let response;
-      let finalUrl = this.resolveFetchUrl(message.url);
-      let lastError;
-      for (const candidateUrl of this.buildFetchCandidates(message.url)) {
-        finalUrl = candidateUrl;
-        try {
-          response = await fetch(candidateUrl, {
-            method: message.method,
-            headers: message.headers,
-            body: message.body ? Buffer.from(message.body, "base64") : void 0,
-            signal: abort.signal
-          });
-          break;
-        } catch (error) {
-          lastError = error;
-          if (abort.signal.aborted || !this.isNetworkFailure(error)) {
-            throw error;
-          }
-        }
-      }
-      if (!response) {
-        throw lastError ?? new Error(`Failed to fetch ${finalUrl}`);
-      }
-      this.postMessage({
-        type: "fetchResponse",
-        requestId: message.requestId,
-        url: response.url,
-        status: response.status,
-        statusText: response.statusText,
-        headers: [...response.headers.entries()]
-      });
-      const reader = response.body?.getReader();
-      if (!reader) {
-        this.postMessage({ type: "fetchEnd", requestId: message.requestId });
-        return;
-      }
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          break;
-        }
-        this.postMessage({
-          type: "fetchChunk",
-          requestId: message.requestId,
-          chunk: Buffer.from(result.value).toString("base64")
-        });
-      }
-      this.postMessage({ type: "fetchEnd", requestId: message.requestId });
-    } catch (error) {
-      if (!abort.signal.aborted) {
-        const messageText = error instanceof Error ? error.message : String(error);
-        const errorName = error instanceof Error ? error.name : void 0;
-        this.postMessage({
-          type: "fetchError",
-          requestId: message.requestId,
-          message: messageText,
-          name: errorName
-        });
-        const urls = this.buildFetchCandidates(message.url);
-        const detail = `method=${message.method} urls=${urls.join(",")} error=${errorName ?? "Error"}: ${messageText}`;
-        this.service.reportNetworkIssue(detail);
-      }
-    } finally {
-      this.fetches.delete(message.requestId);
     }
   }
 };
@@ -9070,84 +8909,139 @@ async function activate(context) {
   const service = new OpenCodeService(context);
   const provider = new OpenCodeSidebarProvider(context, service);
   const settingsPanel = new OpenCodeSettingsPanel(context, service);
+  const statusBar = vscode6.window.createStatusBarItem(vscode6.StatusBarAlignment.Right, 100);
+  statusBar.command = "opencodeVisual.focus";
+  context.subscriptions.push(
+    statusBar,
+    service.onDidChangeState((state) => {
+      switch (state.connection.status) {
+        case "connected": {
+          statusBar.text = "$(check) OpenCode";
+          statusBar.tooltip = `Connected to ${state.connection.baseUrl}`;
+          statusBar.backgroundColor = void 0;
+          statusBar.command = "opencodeVisual.focus";
+          break;
+        }
+        case "connecting": {
+          statusBar.text = "$(sync~spin) OpenCode";
+          statusBar.tooltip = state.connection.error ?? "Connecting...";
+          statusBar.backgroundColor = void 0;
+          statusBar.command = "opencodeVisual.focus";
+          break;
+        }
+        case "error": {
+          statusBar.text = "$(warning) OpenCode";
+          statusBar.tooltip = state.connection.error ?? "OpenCode connection error";
+          statusBar.backgroundColor = new vscode6.ThemeColor("statusBarItem.warningBackground");
+          statusBar.command = "opencodeVisual.openSettings";
+          break;
+        }
+      }
+      statusBar.show();
+    })
+  );
   const syncWorkspace = (reloadOnChange) => {
     void service.syncWorkspaceContext().then(async (changed) => {
       if (!reloadOnChange || !changed) {
         return;
       }
       await provider.reload();
-    }).catch(() => {
+    }).catch((error) => {
+      service.logOutput(`[syncWorkspace] ${error instanceof Error ? error.message : String(error)}`);
     });
   };
   context.subscriptions.push(service, provider, settingsPanel);
   context.subscriptions.push(
-    vscode5.window.registerWebviewViewProvider(OpenCodeSidebarProvider.viewId, provider, {
+    vscode6.window.registerWebviewViewProvider(OpenCodeSidebarProvider.viewId, provider, {
       webviewOptions: {
         retainContextWhenHidden: true
       }
     })
   );
   context.subscriptions.push(
-    vscode5.window.onDidChangeActiveTextEditor(() => {
+    vscode6.window.onDidChangeActiveTextEditor(() => {
       syncWorkspace(false);
     }),
-    vscode5.workspace.onDidChangeWorkspaceFolders(() => {
+    vscode6.workspace.onDidChangeWorkspaceFolders(() => {
       syncWorkspace(true);
     }),
-    vscode5.workspace.onDidChangeConfiguration((event) => {
+    vscode6.workspace.onDidChangeConfiguration((event) => {
       if (!event.affectsConfiguration("opencodeVisual")) {
         return;
       }
       void provider.reload();
       void settingsPanel.reload();
     }),
-    vscode5.window.onDidChangeVisibleTextEditors(() => {
+    vscode6.window.onDidChangeVisibleTextEditors(() => {
       syncWorkspace(false);
     }),
-    vscode5.window.onDidChangeActiveColorTheme(() => {
+    vscode6.window.onDidChangeActiveColorTheme(() => {
       provider.notifyTheme();
       settingsPanel.notifyTheme();
     })
   );
   context.subscriptions.push(
-    vscode5.commands.registerCommand("opencodeVisual.focus", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.focus", async () => {
       await provider.reveal();
     }),
-    vscode5.commands.registerCommand("opencodeVisual.newSession", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.newSession", async () => {
       await provider.reveal();
       provider.dispatchAction("newSession");
     }),
-    vscode5.commands.registerCommand("opencodeVisual.refresh", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.refresh", async () => {
       await provider.reload();
       await provider.reveal();
     }),
-    vscode5.commands.registerCommand("opencodeVisual.openSettings", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.openSettings", async () => {
       await settingsPanel.open();
     }),
-    vscode5.commands.registerCommand("opencodeVisual.restartServer", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.restartServer", async () => {
       await service.ensureServerReady(true);
       await provider.reload();
       await settingsPanel.reload();
     }),
-    vscode5.commands.registerCommand("opencodeVisual.openTerminal", async () => {
-      const settings = vscode5.workspace.getConfiguration("opencodeVisual");
+    vscode6.commands.registerCommand("opencodeVisual.openTerminal", async () => {
+      const settings = vscode6.workspace.getConfiguration("opencodeVisual");
       const opencodePath = settings.get("opencodePath", "opencode");
-      const workspace5 = service.getWorkspaceContext();
-      const cwd = workspace5.directory;
-      const terminal = vscode5.window.createTerminal({
+      const workspace6 = service.getWorkspaceContext();
+      const cwd = workspace6.directory;
+      const terminal = vscode6.window.createTerminal({
         name: "OpenCode",
         cwd
       });
       terminal.sendText(opencodePath);
       terminal.show();
     }),
-    vscode5.commands.registerCommand("opencodeVisual.installCli", async () => {
+    vscode6.commands.registerCommand("opencodeVisual.installCli", async () => {
       await service.installCli();
+    }),
+    vscode6.commands.registerCommand("opencodeVisual.switchSession", async () => {
+      const state = service.getState();
+      if (state.sessions.length === 0) {
+        void vscode6.window.showInformationMessage("No OpenCode sessions available.");
+        return;
+      }
+      const items = state.sessions.map((session) => ({
+        label: session.title || "Untitled session",
+        description: session.id,
+        picked: session.id === state.activeSessionId,
+        sessionId: session.id
+      }));
+      const selected = await vscode6.window.showQuickPick(items, {
+        placeHolder: "Select an OpenCode session",
+        canPickMany: false
+      });
+      if (!selected) {
+        return;
+      }
+      await service.selectSession(selected.sessionId);
+      await provider.reveal();
     })
   );
   const cliAvailable = await service.ensureCliInstalled();
   if (cliAvailable) {
-    void service.ensureServerReady().catch(() => {
+    void service.ensureServerReady().catch((error) => {
+      service.logOutput(`[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 }

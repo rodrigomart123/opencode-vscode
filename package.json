@@ -36,7 +36,8 @@
     "onCommand:opencodeVisual.refresh",
     "onCommand:opencodeVisual.openSettings",
     "onCommand:opencodeVisual.openTerminal",
-    "onCommand:opencodeVisual.installCli"
+    "onCommand:opencodeVisual.installCli",
+    "onCommand:opencodeVisual.switchSession"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -91,6 +92,30 @@
       {
         "command": "opencodeVisual.installCli",
         "title": "OpenCode: Install CLI"
+      },
+      {
+        "command": "opencodeVisual.switchSession",
+        "title": "OpenCode: Switch Session"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "opencodeVisual.focus",
+        "key": "ctrl+shift+alt+oem_period",
+        "mac": "cmd+shift+alt+oem_period",
+        "when": "editorTextFocus || terminalFocus"
+      },
+      {
+        "command": "opencodeVisual.newSession",
+        "key": "ctrl+shift+alt+o",
+        "mac": "cmd+shift+alt+o",
+        "when": "editorTextFocus || terminalFocus"
+      },
+      {
+        "command": "opencodeVisual.switchSession",
+        "key": "ctrl+shift+alt+s",
+        "mac": "cmd+shift+alt+s",
+        "when": "editorTextFocus || terminalFocus"
       }
     ],
     "menus": {
@@ -132,6 +157,9 @@
         },
         {
           "command": "opencodeVisual.installCli"
+        },
+        {
+          "command": "opencodeVisual.switchSession"
         }
       ]
     },
@@ -331,16 +359,29 @@
     "watch": "npm run watch:extension",
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "vite build --watch",
-    "check": "tsc -p . --noEmit && tsc -p tsconfig.webview.json --noEmit"
+    "check": "tsc -p . --noEmit && tsc -p tsconfig.webview.json --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "test:unit": "node --import tsx --test test/**/*.test.ts",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "test:integration": "npm run test:compile && node ./out/src/test/runTest.js",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",
     "@tsconfig/node22": "^22.0.2",
     "@types/cross-spawn": "^6.0.6",
     "@types/luxon": "^3.7.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.6.0",
     "@types/vscode": "^1.96.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.25.11",
+    "glob": "^11.0.1",
+    "mocha": "^11.2.0",
+    "prettier": "^3.5.0",
+    "tsx": "^4.22.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.4",
     "vite-plugin-solid": "^2.11.10"
