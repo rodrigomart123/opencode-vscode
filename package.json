@@ -2,7 +2,7 @@
   "name": "opencode-for-vscode",
   "displayName": "OpenCode for VSCode",
   "description": "VS Code sidebar client for OpenCode sessions.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "rodrigomart123",
   "license": "MIT",
   "icon": "icon.png",
@@ -34,7 +34,9 @@
     "onCommand:opencodeVisual.newSession",
     "onCommand:opencodeVisual.restartServer",
     "onCommand:opencodeVisual.refresh",
-    "onCommand:opencodeVisual.openSettings"
+    "onCommand:opencodeVisual.openSettings",
+    "onCommand:opencodeVisual.openTerminal",
+    "onCommand:opencodeVisual.installCli"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -80,6 +82,15 @@
       {
         "command": "opencodeVisual.restartServer",
         "title": "OpenCode: Restart Local Server"
+      },
+      {
+        "command": "opencodeVisual.openTerminal",
+        "title": "OpenCode: Open Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "opencodeVisual.installCli",
+        "title": "OpenCode: Install CLI"
       }
     ],
     "menus": {
@@ -115,6 +126,12 @@
         },
         {
           "command": "opencodeVisual.restartServer"
+        },
+        {
+          "command": "opencodeVisual.openTerminal"
+        },
+        {
+          "command": "opencodeVisual.installCli"
         }
       ]
     },

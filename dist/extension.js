@@ -279,7 +279,7 @@ var require_resolveCommand = __commonJS({
     var which = require_which();
     var getPathKey = require_path_key();
     function resolveCommandAttempt(parsed, withoutPathExt) {
-      const env3 = parsed.options.env || process.env;
+      const env4 = parsed.options.env || process.env;
       const cwd = process.cwd();
       const hasCustomCwd = parsed.options.cwd != null;
       const shouldSwitchCwd = hasCustomCwd && process.chdir !== void 0 && !process.chdir.disabled;
@@ -292,7 +292,7 @@ var require_resolveCommand = __commonJS({
       let resolved;
       try {
         resolved = which.sync(parsed.command, {
-          path: env3[getPathKey({ env: env3 })],
+          path: env4[getPathKey({ env: env4 })],
           pathExt: withoutPathExt ? path3.delimiter : void 0
         });
       } catch (e) {
@@ -7110,11 +7110,11 @@ var OpenCodeService = class {
       `--port=${String(port)}`,
       "--print-logs"
     ];
-    const env3 = this.buildManagedServerEnv();
-    const command = await this.resolveOpencodeCommand(settings.opencodePath, env3.PATH);
+    const env4 = this.buildManagedServerEnv();
+    const command = await this.resolveOpencodeCommand(settings.opencodePath, env4.PATH);
     const proc = (0, import_node_child_process.spawn)(command, args, {
       cwd: this.currentDirectory,
-      env: env3,
+      env: env4,
       shell: process.platform === "win32" && (!this.looksLikeFilePath(command) || this.requiresWindowsShell(command)),
       stdio: "pipe"
     });
@@ -7260,21 +7260,21 @@ var OpenCodeService = class {
     });
   }
   buildManagedServerEnv() {
-    const env3 = {
+    const env4 = {
       ...process.env
     };
     if (process.platform === "win32") {
-      return env3;
+      return env4;
     }
-    const current = this.splitPathEntries(env3.PATH);
+    const current = this.splitPathEntries(env4.PATH);
     const extras = this.getCommonBinaryDirectories();
     for (const entry of extras) {
       if (!current.includes(entry)) {
         current.push(entry);
       }
     }
-    env3.PATH = current.join(path.delimiter);
-    return env3;
+    env4.PATH = current.join(path.delimiter);
+    return env4;
   }
   getCommonBinaryDirectories() {
     if (process.platform === "win32") {
@@ -7553,6 +7553,137 @@ var OpenCodeService = class {
   }
   sameDirectory(left, right) {
     return this.normalizeDirectoryForKey(left) === this.normalizeDirectoryForKey(right);
+  }
+  async isCliAvailable() {
+    const settings = this.getSettings();
+    const env4 = this.buildManagedServerEnv();
+    try {
+      const command = await this.resolveOpencodeCommand(settings.opencodePath, env4.PATH);
+      return Boolean(command);
+    } catch {
+      return false;
+    }
+  }
+  async installCli() {
+    return await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Installing OpenCode CLI...",
+        cancellable: false
+      },
+      async (progress) => {
+        try {
+          progress.report({ message: "Installing via npm..." });
+          this.output.appendLine("[install] Installing opencode-ai via npm...");
+          const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+          const result = await this.runCommand(npmCommand, ["install", "-g", "opencode-ai"], {
+            timeout: 12e4
+          });
+          if (result.exitCode !== 0) {
+            this.output.appendLine(`[install] npm install failed (exit ${result.exitCode}): ${result.stderr}`);
+            throw new Error(`npm install failed: ${result.stderr || result.stdout}`);
+          }
+          this.output.appendLine("[install] npm install completed successfully");
+          progress.report({ message: "Verifying installation..." });
+          const available = await this.isCliAvailable();
+          if (!available) {
+            const npmBin = await this.getNpmGlobalBin();
+            if (npmBin) {
+              const candidate = process.platform === "win32" ? path.join(npmBin, "opencode.cmd") : path.join(npmBin, "opencode");
+              if (await this.fileCanExecute(candidate)) {
+                await vscode.workspace.getConfiguration("opencodeVisual").update(
+                  "opencodePath",
+                  candidate,
+                  vscode.ConfigurationTarget.Global
+                );
+                this.output.appendLine(`[install] Updated opencodePath to: ${candidate}`);
+                return true;
+              }
+            }
+            this.output.appendLine("[install] CLI installed but not found in PATH. User may need to restart terminal.");
+            vscode.window.showInformationMessage(
+              "OpenCode CLI was installed, but is not yet in PATH. Restart VS Code or set opencodeVisual.opencodePath manually."
+            );
+            return true;
+          }
+          this.output.appendLine("[install] OpenCode CLI installed and verified");
+          vscode.window.showInformationMessage("OpenCode CLI installed successfully!");
+          return true;
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          this.output.appendLine(`[install] Installation failed: ${detail}`);
+          const action = await vscode.window.showErrorMessage(
+            "Failed to install OpenCode CLI automatically.",
+            "Install Manually",
+            "Retry"
+          );
+          if (action === "Install Manually") {
+            void vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai"));
+          }
+          if (action === "Retry") {
+            void vscode.commands.executeCommand("opencodeVisual.installCli");
+          }
+          return false;
+        }
+      }
+    );
+  }
+  async ensureCliInstalled() {
+    const available = await this.isCliAvailable();
+    if (available) {
+      return true;
+    }
+    const action = await vscode.window.showInformationMessage(
+      "OpenCode CLI is not installed. Would you like to install it automatically?",
+      "Install via npm",
+      "Learn More"
+    );
+    if (action === "Install via npm") {
+      return await this.installCli();
+    }
+    if (action === "Learn More") {
+      void vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai"));
+    }
+    return false;
+  }
+  async getNpmGlobalBin() {
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const result = await this.runCommand(npmCommand, ["prefix", "-g"], { timeout: 5e3 });
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      const prefix = result.stdout.trim();
+      return process.platform === "win32" ? prefix : path.join(prefix, "bin");
+    }
+    return void 0;
+  }
+  async runCommand(command, args, options = {}) {
+    return await new Promise((resolve2) => {
+      const proc = (0, import_node_child_process.spawn)(command, args, {
+        cwd: options.cwd ?? this.currentDirectory ?? process.cwd(),
+        env: { ...process.env },
+        shell: process.platform === "win32",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      let stdout = "";
+      let stderr = "";
+      proc.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      proc.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      const timeout = options.timeout ? setTimeout(() => {
+        proc.kill();
+        resolve2({ exitCode: -1, stdout, stderr: stderr + "\nTimed out" });
+      }, options.timeout) : void 0;
+      proc.on("error", (error) => {
+        if (timeout) clearTimeout(timeout);
+        resolve2({ exitCode: -1, stdout, stderr: stderr + "\n" + String(error) });
+      });
+      proc.on("exit", (code) => {
+        if (timeout) clearTimeout(timeout);
+        resolve2({ exitCode: code ?? -1, stdout, stderr });
+      });
+    });
   }
 };
 
@@ -8997,10 +9128,28 @@ async function activate(context) {
       await service.ensureServerReady(true);
       await provider.reload();
       await settingsPanel.reload();
+    }),
+    vscode5.commands.registerCommand("opencodeVisual.openTerminal", async () => {
+      const settings = vscode5.workspace.getConfiguration("opencodeVisual");
+      const opencodePath = settings.get("opencodePath", "opencode");
+      const workspace5 = service.getWorkspaceContext();
+      const cwd = workspace5.directory;
+      const terminal = vscode5.window.createTerminal({
+        name: "OpenCode",
+        cwd
+      });
+      terminal.sendText(opencodePath);
+      terminal.show();
+    }),
+    vscode5.commands.registerCommand("opencodeVisual.installCli", async () => {
+      await service.installCli();
     })
   );
-  void service.ensureServerReady().catch(() => {
-  });
+  const cliAvailable = await service.ensureCliInstalled();
+  if (cliAvailable) {
+    void service.ensureServerReady().catch(() => {
+    });
+  }
 }
 function deactivate() {
 }

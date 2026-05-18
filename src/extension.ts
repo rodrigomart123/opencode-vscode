@@ -74,11 +74,29 @@ export async function activate(context: vscode.ExtensionContext) {
       await provider.reload();
       await settingsPanel.reload();
     }),
+    vscode.commands.registerCommand("opencodeVisual.openTerminal", async () => {
+      const settings = vscode.workspace.getConfiguration("opencodeVisual");
+      const opencodePath = settings.get<string>("opencodePath", "opencode");
+      const workspace = service.getWorkspaceContext();
+      const cwd = workspace.directory;
+      const terminal = vscode.window.createTerminal({
+        name: "OpenCode",
+        cwd,
+      });
+      terminal.sendText(opencodePath);
+      terminal.show();
+    }),
+    vscode.commands.registerCommand("opencodeVisual.installCli", async () => {
+      await service.installCli();
+    }),
   );
 
-  void service.ensureServerReady().catch(() => {
-    // The webview will surface connection failures against the configured server.
-  });
+  const cliAvailable = await service.ensureCliInstalled();
+  if (cliAvailable) {
+    void service.ensureServerReady().catch(() => {
+      // The webview will surface connection failures against the configured server.
+    });
+  }
 }
 
 export function deactivate() {

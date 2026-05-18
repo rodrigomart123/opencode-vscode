@@ -1,5 +1,6 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import * as fs from "node:fs";
+import * as https from "node:https";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -2191,6 +2192,163 @@ export class OpenCodeService implements vscode.Disposable {
 
   private sameDirectory(left?: string, right?: string) {
     return this.normalizeDirectoryForKey(left) === this.normalizeDirectoryForKey(right);
+  }
+
+  async isCliAvailable(): Promise<boolean> {
+    const settings = this.getSettings();
+    const env = this.buildManagedServerEnv();
+    try {
+      const command = await this.resolveOpencodeCommand(settings.opencodePath, env.PATH);
+      return Boolean(command);
+    } catch {
+      return false;
+    }
+  }
+
+  async installCli(): Promise<boolean> {
+    return await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Installing OpenCode CLI...",
+        cancellable: false,
+      },
+      async (progress) => {
+        try {
+          progress.report({ message: "Installing via npm..." });
+          this.output.appendLine("[install] Installing opencode-ai via npm...");
+
+          const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+          const result = await this.runCommand(npmCommand, ["install", "-g", "opencode-ai"], {
+            timeout: 120000,
+          });
+
+          if (result.exitCode !== 0) {
+            this.output.appendLine(`[install] npm install failed (exit ${result.exitCode}): ${result.stderr}`);
+            throw new Error(`npm install failed: ${result.stderr || result.stdout}`);
+          }
+
+          this.output.appendLine("[install] npm install completed successfully");
+
+          progress.report({ message: "Verifying installation..." });
+          const available = await this.isCliAvailable();
+          if (!available) {
+            const npmBin = await this.getNpmGlobalBin();
+            if (npmBin) {
+              const candidate = process.platform === "win32"
+                ? path.join(npmBin, "opencode.cmd")
+                : path.join(npmBin, "opencode");
+              if (await this.fileCanExecute(candidate)) {
+                await vscode.workspace.getConfiguration("opencodeVisual").update(
+                  "opencodePath",
+                  candidate,
+                  vscode.ConfigurationTarget.Global,
+                );
+                this.output.appendLine(`[install] Updated opencodePath to: ${candidate}`);
+                return true;
+              }
+            }
+            this.output.appendLine("[install] CLI installed but not found in PATH. User may need to restart terminal.");
+            vscode.window.showInformationMessage(
+              "OpenCode CLI was installed, but is not yet in PATH. Restart VS Code or set opencodeVisual.opencodePath manually.",
+            );
+            return true;
+          }
+
+          this.output.appendLine("[install] OpenCode CLI installed and verified");
+          vscode.window.showInformationMessage("OpenCode CLI installed successfully!");
+          return true;
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          this.output.appendLine(`[install] Installation failed: ${detail}`);
+
+          const action = await vscode.window.showErrorMessage(
+            "Failed to install OpenCode CLI automatically.",
+            "Install Manually",
+            "Retry",
+          );
+
+          if (action === "Install Manually") {
+            void vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai"));
+          }
+
+          if (action === "Retry") {
+            void vscode.commands.executeCommand("opencodeVisual.installCli");
+          }
+
+          return false;
+        }
+      },
+    );
+  }
+
+  async ensureCliInstalled(): Promise<boolean> {
+    const available = await this.isCliAvailable();
+    if (available) {
+      return true;
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      "OpenCode CLI is not installed. Would you like to install it automatically?",
+      "Install via npm",
+      "Learn More",
+    );
+
+    if (action === "Install via npm") {
+      return await this.installCli();
+    }
+
+    if (action === "Learn More") {
+      void vscode.env.openExternal(vscode.Uri.parse("https://opencode.ai"));
+    }
+
+    return false;
+  }
+
+  private async getNpmGlobalBin(): Promise<string | undefined> {
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const result = await this.runCommand(npmCommand, ["prefix", "-g"], { timeout: 5000 });
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      const prefix = result.stdout.trim();
+      return process.platform === "win32" ? prefix : path.join(prefix, "bin");
+    }
+    return undefined;
+  }
+
+  private async runCommand(
+    command: string,
+    args: string[],
+    options: { timeout?: number; cwd?: string } = {},
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    return await new Promise((resolve) => {
+      const proc = spawn(command, args, {
+        cwd: options.cwd ?? this.currentDirectory ?? process.cwd(),
+        env: { ...process.env },
+        shell: process.platform === "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+      proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+      proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+      const timeout = options.timeout
+        ? setTimeout(() => {
+            proc.kill();
+            resolve({ exitCode: -1, stdout, stderr: stderr + "\nTimed out" });
+          }, options.timeout)
+        : undefined;
+
+      proc.on("error", (error) => {
+        if (timeout) clearTimeout(timeout);
+        resolve({ exitCode: -1, stdout, stderr: stderr + "\n" + String(error) });
+      });
+
+      proc.on("exit", (code) => {
+        if (timeout) clearTimeout(timeout);
+        resolve({ exitCode: code ?? -1, stdout, stderr });
+      });
+    });
   }
 }
 
