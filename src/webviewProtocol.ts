@@ -70,6 +70,16 @@ export type WebviewToHostMessage =
       type: "openSettings";
     }
   | {
+      type: "openFile";
+      filePath: string;
+      range?: {
+        startLine: number;
+        startCharacter: number;
+        endLine: number;
+        endCharacter: number;
+      };
+    }
+  | {
       type: "openDiff";
       filePath: string;
       before: string;
