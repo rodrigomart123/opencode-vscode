@@ -1,73 +1,85 @@
 # OpenCode for VSCode
 
-OpenCode for VSCode brings OpenCode sessions into a native VS Code sidebar experience.
+> VS Code sidebar client for [OpenCode](https://opencode.ai) sessions.
 
-Repository: `https://github.com/rodrigomart123/opencode-for-vscode`
+[![Version](https://img.shields.io/visual-studio-marketplace/v/rodrigomart123.opencode-for-vscode?color=blue&label=Version)](https://marketplace.visualstudio.com/items?itemName=rodrigomart123.opencode-for-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/rodrigomart123.opencode-for-vscode?color=green)](https://marketplace.visualstudio.com/items?itemName=rodrigomart123.opencode-for-vscode)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
 
 ## Features
 
-- OpenCode chat and session workflow directly in the Activity Bar sidebar
-- Uses the active workspace folder as the OpenCode working directory
-- Connects to existing OpenCode server, with optional auto-start local server
-- Preserves sidebar context while switching files in the same workspace
-- Quick commands for New Session, Refresh, Settings, and Restart Local Server
+- **Native sidebar integration** — OpenCode sessions directly in the VS Code Activity Bar
+- **Auto-install CLI** — detects and installs OpenCode automatically via npm on first launch
+- **Smart PATH resolution** — searches PATH, well-known locations, and login shell fallback
+- **Multi-session management** — create, switch, archive, and delete sessions
+- **Real-time sync** — live event streaming with automatic reconnection
+- **Workspace-aware** — uses the active workspace folder as the OpenCode working directory
+- **Open Terminal** — launch an OpenCode CLI terminal from the command palette
+- **Configurable** — server URL, auto-start, debug logs, themes, fonts, and more
+
+## Quick Start
+
+1. Install the extension from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=rodrigomart123.opencode-for-vscode)
+2. Open a workspace folder
+3. The extension will auto-detect or install the OpenCode CLI
+4. Start chatting from the sidebar
+
+> **No CLI installed?** The extension will offer to install it automatically via `npm install -g opencode-ai`.
 
 ## Requirements
 
 - VS Code `1.96.0` or newer
-- OpenCode CLI installed (for example via Homebrew, npm, or curl installer)
-
-Note: VS Code can launch without your interactive shell startup files, so PATH can differ from terminal. The extension now tries PATH, well-known install locations, and login-shell lookup. If auto-detection still fails, set `opencodeVisual.opencodePath` to the full executable path (for example `/opt/homebrew/bin/opencode`, `~/.local/bin/opencode`, or `C:\\Users\\you\\scoop\\shims\\opencode.exe`).
-
-## Extension Settings
-
-- `opencodeVisual.opencodePath`: CLI command or executable path for OpenCode (supports `~`)
-- `opencodeVisual.serverBaseUrl`: base URL for OpenCode server
-- `opencodeVisual.autoStartServer`: auto-run `opencode serve` when needed (default: `true`)
-- `opencodeVisual.debugServerLogs`: stream server logs to output channel
-
-## Troubleshooting CLI detection
-
-- If OpenCode works in terminal but not in VS Code, set `opencodeVisual.opencodePath` to the full executable path.
-- macOS/Linux: run `command -v opencode` in terminal and copy that path into settings.
-- Windows (PowerShell): run `Get-Command opencode | Select-Object -ExpandProperty Source`.
-- Open `View -> Output`, then select `OpenCode VS Code` to inspect server startup diagnostics.
+- Node.js (for auto-install feature)
+- OpenCode CLI (auto-installed if missing)
 
 ## Commands
 
-- `OpenCode: Focus Sidebar`
-- `OpenCode: New Session`
-- `OpenCode: Refresh`
-- `OpenCode: Open Settings`
-- `OpenCode: Restart Local Server`
+| Command | Description |
+|---|---|
+| `OpenCode: Focus Sidebar` | Focus the OpenCode sidebar view |
+| `OpenCode: New Session` | Create a new OpenCode session |
+| `OpenCode: Refresh` | Reload sidebar and reconnect |
+| `OpenCode: Open Settings` | Open the settings panel |
+| `OpenCode: Restart Local Server` | Restart the managed server |
+| `OpenCode: Open Terminal` | Open a terminal with the OpenCode CLI |
+| `OpenCode: Install CLI` | Manually install/update the OpenCode CLI |
+
+## Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `opencodeVisual.opencodePath` | `opencode` | CLI command or executable path (supports `~`) |
+| `opencodeVisual.serverBaseUrl` | `http://127.0.0.1:4096` | Base URL for the OpenCode server |
+| `opencodeVisual.autoStartServer` | `true` | Auto-run `opencode serve` when needed |
+| `opencodeVisual.debugServerLogs` | `false` | Stream server logs to output channel |
+
+## Troubleshooting
+
+**CLI not found in VS Code but works in terminal:**
+
+VS Code may use a different PATH than your interactive shell. The extension tries multiple strategies, but if auto-detection fails:
+
+1. Run `command -v opencode` (macOS/Linux) or `Get-Command opencode` (Windows)
+2. Copy the full path into `opencodeVisual.opencodePath` in settings
+
+**View diagnostics:**
+`View` → `Output` → select `OpenCode for VSCode` from the dropdown
 
 ## Install from VSIX
-
-1. Build and package:
 
 ```bash
 npm install
 npm run build
-npx @vscode/vsce package
-```
-
-2. Install generated VSIX:
-
-```bash
-code --install-extension .\opencode-for-vscode-<version>.vsix --force
+npx vsce package
+code --install-extension ./opencode-for-vscode-<version>.vsix --force
 ```
 
 Then run `Developer: Reload Window`.
 
-## Release and Publishing
+## License
 
-This repository is prepared for VS Code Marketplace publication with:
+MIT — see [LICENSE](LICENSE.txt) for details.
 
-- publisher metadata in `package.json`
-- MIT license in root `LICENSE`
-- release notes in `CHANGELOG.md`
-- third-party attribution in `THIRD_PARTY_NOTICES.md`
-
-## Legal Notes
-
-This extension includes generated webview assets derived from the upstream OpenCode project (`opencode-original`) under MIT terms. See `THIRD_PARTY_NOTICES.md` for attribution.
+Third-party attributions in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
