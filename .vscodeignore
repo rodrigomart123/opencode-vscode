@@ -21,3 +21,19 @@
 !LICENSE
 !THIRD_PARTY_NOTICES.md
 !.vscodeignore
+
+# Explicit exclusions for safety
+dist/**/*.map
+media/**/*.map
+node_modules/
+src/
+*.test.ts
+__mocks__/
+__tests__/
+vitest.config.ts
+eslint.config.mjs
+tsconfig*.json
+vite.config.ts
+.husky/
+.github/
+.vscode/
