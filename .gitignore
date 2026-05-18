@@ -7,3 +7,4 @@ git_log.txt
 temp-*.tsx
 opencode-original/
 config.json
+config.example.json
