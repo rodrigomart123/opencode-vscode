@@ -76,6 +76,16 @@ export type WebviewToHostMessage =
       after: string;
     }
   | {
+      type: "openFile";
+      filePath: string;
+      range?: {
+        startLine: number;
+        startCharacter: number;
+        endLine: number;
+        endCharacter: number;
+      };
+    }
+  | {
       type: "pickDirectory";
       requestId: string;
       title?: string;

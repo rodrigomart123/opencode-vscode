@@ -8,6 +8,38 @@ export async function activate(context: vscode.ExtensionContext) {
   const provider = new OpenCodeSidebarProvider(context, service);
   const settingsPanel = new OpenCodeSettingsPanel(context, service);
 
+  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBar.command = "opencodeVisual.focus";
+  context.subscriptions.push(
+    statusBar,
+    service.onDidChangeState((state) => {
+      switch (state.connection.status) {
+        case "connected": {
+          statusBar.text = "$(check) OpenCode";
+          statusBar.tooltip = `Connected to ${state.connection.baseUrl}`;
+          statusBar.backgroundColor = undefined;
+          statusBar.command = "opencodeVisual.focus";
+          break;
+        }
+        case "connecting": {
+          statusBar.text = "$(sync~spin) OpenCode";
+          statusBar.tooltip = state.connection.error ?? "Connecting...";
+          statusBar.backgroundColor = undefined;
+          statusBar.command = "opencodeVisual.focus";
+          break;
+        }
+        case "error": {
+          statusBar.text = "$(warning) OpenCode";
+          statusBar.tooltip = state.connection.error ?? "OpenCode connection error";
+          statusBar.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
+          statusBar.command = "opencodeVisual.openSettings";
+          break;
+        }
+      }
+      statusBar.show();
+    }),
+  );
+
   const syncWorkspace = (reloadOnChange: boolean) => {
     void service
       .syncWorkspaceContext()
@@ -17,8 +49,8 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         await provider.reload();
       })
-      .catch(() => {
-        // State errors are surfaced by the sidebar connection state.
+      .catch((error) => {
+        service.logOutput(`[syncWorkspace] ${error instanceof Error ? error.message : String(error)}`);
       });
   };
 
@@ -89,12 +121,38 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("opencodeVisual.installCli", async () => {
       await service.installCli();
     }),
+    vscode.commands.registerCommand("opencodeVisual.switchSession", async () => {
+      const state = service.getState();
+      if (state.sessions.length === 0) {
+        void vscode.window.showInformationMessage("No OpenCode sessions available.");
+        return;
+      }
+
+      const items = state.sessions.map((session) => ({
+        label: session.title || "Untitled session",
+        description: session.id,
+        picked: session.id === state.activeSessionId,
+        sessionId: session.id,
+      }));
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: "Select an OpenCode session",
+        canPickMany: false,
+      });
+
+      if (!selected) {
+        return;
+      }
+
+      await service.selectSession(selected.sessionId);
+      await provider.reveal();
+    }),
   );
 
   const cliAvailable = await service.ensureCliInstalled();
   if (cliAvailable) {
-    void service.ensureServerReady().catch(() => {
-      // The webview will surface connection failures against the configured server.
+    void service.ensureServerReady().catch((error) => {
+      service.logOutput(`[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
 }

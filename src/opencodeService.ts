@@ -65,22 +65,7 @@ const ACTIVE_SESSION_STORAGE_PREFIX = "opencodeVisual.activeSession";
 const LAST_SESSION_STORAGE_PREFIX = "opencodeVisual.lastSession";
 const COMMAND_LOOKUP_TIMEOUT_MS = 2500;
 
-const windowsPath = (input: string) => /^[A-Za-z]:/.test(input) || input.startsWith("//");
-
-const workspaceKey = (directory: string) => {
-  const value = directory.replaceAll("\\", "/");
-  const drive = value.match(/^([A-Za-z]:)\/+$/);
-  if (drive) return `${drive[1]}/`;
-  if (/^\/+$/i.test(value)) return "/";
-  return value.replace(/\/+$/, "");
-};
-
-const sameWorkspace = (left: string, right: string) => {
-  const a = workspaceKey(left);
-  const b = workspaceKey(right);
-  if (windowsPath(a) || windowsPath(b)) return a.toLowerCase() === b.toLowerCase();
-  return a === b;
-};
+import { sameWorkspace, workspaceKey } from "./pathUtils";
 
 export class OpenCodeService implements vscode.Disposable {
   private readonly stateEmitter = new vscode.EventEmitter<SidebarState>();
@@ -124,6 +109,10 @@ export class OpenCodeService implements vscode.Disposable {
       baseUrl: this.getSettings().serverBaseUrl,
       managed: false,
     };
+  }
+
+  logOutput(message: string) {
+    this.output.appendLine(message);
   }
 
   dispose() {
@@ -903,8 +892,14 @@ export class OpenCodeService implements vscode.Disposable {
       v2Client.app.agents({ directory }, REQUEST_OPTIONS),
       client.command.list(REQUEST_OPTIONS),
       client.config.get(REQUEST_OPTIONS),
-      v2Client.vcs.get({ directory }, REQUEST_OPTIONS).catch(() => undefined),
-      v2Client.project.current({ directory }, REQUEST_OPTIONS).catch(() => undefined),
+      v2Client.vcs.get({ directory }, REQUEST_OPTIONS).catch((error) => {
+        this.output.appendLine(`[refreshState] VCS info unavailable: ${this.formatError(error)}`);
+        return undefined;
+      }),
+      v2Client.project.current({ directory }, REQUEST_OPTIONS).catch((error) => {
+        this.output.appendLine(`[refreshState] Project info unavailable: ${this.formatError(error)}`);
+        return undefined;
+      }),
     ]);
 
     const sessions = this.unwrap(sessionsResult);
@@ -2214,7 +2209,7 @@ export class OpenCodeService implements vscode.Disposable {
       },
       async (progress) => {
         try {
-          progress.report({ message: "Installing via npm..." });
+          progress.report({ message: "Running npm install -g opencode-ai (this may take a minute)..." });
           this.output.appendLine("[install] Installing opencode-ai via npm...");
 
           const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -2229,7 +2224,7 @@ export class OpenCodeService implements vscode.Disposable {
 
           this.output.appendLine("[install] npm install completed successfully");
 
-          progress.report({ message: "Verifying installation..." });
+          progress.report({ message: "Verifying CLI is available in PATH..." });
           const available = await this.isCliAvailable();
           if (!available) {
             const npmBin = await this.getNpmGlobalBin();
