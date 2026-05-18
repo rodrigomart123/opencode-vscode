@@ -391,10 +391,20 @@ export function getWebviewHtml(
   const connectSrc = `${webview.cspSource} ${buildConnectSrc(config.serverUrl)}`;
 
   const markdownFixStyle = `<style nonce="${nonce}">
-    /* Fix markdown list rendering in composer preview (github.com/rodrigomart123/opencode-for-vscode/issues/6) */
-    ul { list-style-type: disc !important; padding-left: 1.5em !important; }
-    ol { list-style-type: decimal !important; padding-left: 1.5em !important; }
-    li { display: list-item !important; }
+    /* Fix markdown list rendering in composer preview (github.com/rodrigomart123/opencode-for-vscode/issues/6).
+       The prompt input hides all markdown markers via .md-m but never creates block-level list elements.
+       We restore marker visibility so lists (and headings/blockquotes) are readable, while keeping
+       inline style markers (bold, italic, code, strikethrough) hidden. */
+    [data-component=prompt-input] .md-m {
+      letter-spacing: normal !important;
+      color: inherit !important;
+      font-size: inherit !important;
+    }
+    [data-component=prompt-input] :is(.md-bold, .md-italic, .md-bold-italic, .md-code, .md-code-block, .md-strikethrough) .md-m {
+      letter-spacing: -1ch !important;
+      color: #0000 !important;
+      font-size: 0 !important;
+    }
   </style>`;
 
   return `<!DOCTYPE html>
