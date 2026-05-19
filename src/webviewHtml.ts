@@ -405,6 +405,26 @@ export function getWebviewHtml(
       color: #0000 !important;
       font-size: 0 !important;
     }
+    /* Enhance inline code visibility in composer (github.com/rodrigomart123/opencode-for-vscode/issues/8).
+       The bundled .md-code background is too subtle on some themes. We add a stronger
+       background, border, and ensure the monospace text pops while typing. */
+    [data-component=prompt-input] .md-code,
+    [data-component=prompt-input] .md-code-block {
+      background: color-mix(in srgb, var(--text-weak) 18%, transparent) !important;
+      outline: 1px solid color-mix(in srgb, var(--text-weak) 25%, transparent) !important;
+      border-radius: 4px !important;
+      padding: 0 4px !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+      font-size: 0.9em !important;
+      color: var(--text-strong, inherit) !important;
+    }
+    @supports not (color: color-mix(in srgb, red, red)) {
+      [data-component=prompt-input] .md-code,
+      [data-component=prompt-input] .md-code-block {
+        background: var(--text-weak) !important;
+        outline: none !important;
+      }
+    }
   </style>`;
 
   return `<!DOCTYPE html>
