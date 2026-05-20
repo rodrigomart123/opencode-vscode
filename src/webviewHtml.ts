@@ -344,6 +344,17 @@ export function getWebviewHtml(
   const nonce = createNonce();
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "app", "app.js"));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "app", "app.css"));
+  const inlineCodeStyle = `<style nonce="${nonce}">
+    [data-component="markdown"] :not(pre) > code {
+      font-size: 13px;
+      padding: 2px 4px;
+      margin: 0 1.5px;
+      border-radius: 2px;
+      background: var(--surface-base);
+      box-shadow: 0 0 0 0.5px var(--border-weak-base);
+    }
+  </style>`;
+
   const settingsBootStyle = config.settingsMode
     ? `<style nonce="${nonce}">
     #root[data-settings-ready="false"] {
@@ -383,6 +394,7 @@ export function getWebviewHtml(
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="${styleUri}" rel="stylesheet" />
+    ${inlineCodeStyle}
     ${settingsBootStyle}
     <script nonce="${nonce}">window.__OPENCODE_VSCODE_CONFIG__ = ${JSON.stringify(config)};</script>
     <script nonce="${nonce}">${storagePreload}</script>
