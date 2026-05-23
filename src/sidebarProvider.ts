@@ -58,6 +58,16 @@ export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vsco
     this.view?.show?.(true);
   }
 
+  async toggle() {
+    if (this.view?.visible) {
+      await vscode.commands.executeCommand("workbench.action.closeSidebar");
+      await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
+      await vscode.commands.executeCommand("workbench.action.closePanel");
+    } else {
+      await this.reveal();
+    }
+  }
+
   async reload() {
     await this.render();
   }

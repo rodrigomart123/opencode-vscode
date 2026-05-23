@@ -88,7 +88,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("opencodeVisual.focus", async () => {
-      await provider.reveal();
+      await provider.toggle();
     }),
     vscode.commands.registerCommand("opencodeVisual.newSession", async () => {
       await provider.reveal();

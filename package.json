@@ -63,7 +63,7 @@
     "commands": [
       {
         "command": "opencodeVisual.focus",
-        "title": "OpenCode: Focus Sidebar"
+        "title": "OpenCode: Toggle Sidebar"
       },
       {
         "command": "opencodeVisual.newSession",
