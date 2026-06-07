@@ -323,6 +323,11 @@
           "default": false,
           "description": "Auto-accept permission prompts for the current workspace."
         },
+        "opencodeVisual.autoCompact": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically compact the session when context usage reaches 50% without interrupting the task."
+        },
         "opencodeVisual.customKeybinds": {
           "type": [
             "object",

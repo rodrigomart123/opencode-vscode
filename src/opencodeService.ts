@@ -559,6 +559,40 @@ export class OpenCodeService implements vscode.Disposable {
     vscode.window.showInformationMessage("OpenCode compacted the active session.");
   }
 
+  private async maybeAutoCompact(sessionId: string) {
+    const enabled = vscode.workspace.getConfiguration("opencodeVisual").get<boolean>("autoCompact", true);
+    if (!enabled) {
+      return;
+    }
+
+    const selection = this.composer;
+    if (!selection?.providerID || !selection?.modelID) {
+      return;
+    }
+
+    const model = this.models.find(
+      (m) => m.providerID === selection.providerID && m.modelID === selection.modelID,
+    );
+    const contextLimit = model?.contextLimit;
+    if (!contextLimit) {
+      return;
+    }
+
+    const totalInputTokens = this.thread.reduce((sum, entry) => {
+      if (entry.info.role === "assistant" && "tokens" in entry.info) {
+        return sum + ((entry.info as { tokens?: { input?: number } }).tokens?.input ?? 0);
+      }
+      return sum;
+    }, 0);
+
+    if (totalInputTokens / contextLimit >= 0.5) {
+      this.output.appendLine(
+        `[auto-compact] ${String(Math.round((totalInputTokens / contextLimit) * 100))}% context used, compacting session ${sessionId}...`,
+      );
+      await this.summarizeSession(sessionId);
+    }
+  }
+
   async captureEditorAttachment(selectionOnly: boolean): Promise<ComposerAttachmentPayload | undefined> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1018,6 +1052,7 @@ export class OpenCodeService implements vscode.Disposable {
       label: `${providerName} / ${model.name}`,
       status: model.status,
       variants: this.getModelVariants(model),
+      contextLimit: model.limit?.context,
     };
   }
 
@@ -1389,6 +1424,7 @@ export class OpenCodeService implements vscode.Disposable {
         this.updateBusyPolling();
         if (event.properties.sessionID === this.activeSessionId) {
           await this.loadActiveSession(event.properties.sessionID);
+          await this.maybeAutoCompact(event.properties.sessionID);
         }
         break;
       }
