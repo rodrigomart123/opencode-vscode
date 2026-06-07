@@ -63,7 +63,7 @@
     "commands": [
       {
         "command": "opencodeVisual.focus",
-        "title": "OpenCode: Focus Sidebar"
+        "title": "OpenCode: Toggle Sidebar"
       },
       {
         "command": "opencodeVisual.newSession",
@@ -322,6 +322,11 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-accept permission prompts for the current workspace."
+        },
+        "opencodeVisual.autoCompact": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically compact the session when context usage reaches 50% without interrupting the task."
         },
         "opencodeVisual.customKeybinds": {
           "type": [

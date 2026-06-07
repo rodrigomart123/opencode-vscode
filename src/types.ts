@@ -24,6 +24,7 @@ export type ModelOption = {
   providerName: string;
   status?: string;
   variants?: string[];
+  contextLimit?: number;
 };
 
 export type ProviderOption = {
