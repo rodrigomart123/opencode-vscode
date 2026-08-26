@@ -11,11 +11,7 @@ import {
   handleFetch,
   pickDirectory,
 } from "./webviewHostUtils";
-import type {
-  HostAction,
-  HostToWebviewMessage,
-  WebviewToHostMessage,
-} from "./webviewProtocol";
+import type { HostAction, HostToWebviewMessage, WebviewToHostMessage } from "./webviewProtocol";
 
 export class OpenCodeSettingsPanel implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;

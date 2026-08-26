@@ -354,6 +354,7 @@
   },
   "scripts": {
     "build": "npm run build:webview && npm run build:extension",
+    "vendor": "node scripts/vendor-upstream.mjs --apply-patches",
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
     "build:webview": "vite build",
     "watch": "npm run watch:extension",

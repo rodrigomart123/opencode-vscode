@@ -208,12 +208,7 @@ export class OpenCodeService implements vscode.Disposable {
     this.networkNoticeUntil = now + 15000;
     const hint = this.getNetworkHint(detail);
     void vscode.window
-      .showWarningMessage(
-        hint,
-        "Open Settings",
-        "Restart Local Server",
-        "Show Output",
-      )
+      .showWarningMessage(hint, "Open Settings", "Restart Local Server", "Show Output")
       .then((action) => {
         if (action === "Open Settings") {
           void vscode.commands.executeCommand("opencodeVisual.openSettings");
@@ -270,16 +265,15 @@ export class OpenCodeService implements vscode.Disposable {
 
   async setComposerSelection(composer: ComposerSelection) {
     const providerID = composer.providerID || undefined;
-    const providerModels = providerID
-      ? this.models.filter((item) => item.providerID === providerID)
-      : [];
+    const providerModels = providerID ? this.models.filter((item) => item.providerID === providerID) : [];
     const providerDefaultModelID = providerID
       ? this.providers.find((item) => item.id === providerID)?.defaultModelID
       : undefined;
     const fallbackModel = providerModels.find((item) => item.modelID === providerDefaultModelID) ?? providerModels[0];
-    const selectedModel = composer.modelID && providerModels.some((item) => item.modelID === composer.modelID)
-      ? composer.modelID
-      : fallbackModel?.modelID;
+    const selectedModel =
+      composer.modelID && providerModels.some((item) => item.modelID === composer.modelID)
+        ? composer.modelID
+        : fallbackModel?.modelID;
     const selectedModelOption = providerModels.find((item) => item.modelID === selectedModel) ?? fallbackModel;
 
     this.composer = {
@@ -363,13 +357,16 @@ export class OpenCodeService implements vscode.Disposable {
     }
 
     const client = this.createV2Client(this.server?.url ?? this.getSettings().serverBaseUrl, directory);
-    await client.session.update({
-      sessionID: sessionId,
-      directory,
-      time: {
-        archived: Date.now(),
+    await client.session.update(
+      {
+        sessionID: sessionId,
+        directory,
+        time: {
+          archived: Date.now(),
+        },
       },
-    }, REQUEST_OPTIONS);
+      REQUEST_OPTIONS,
+    );
     await this.refreshState();
   }
 
@@ -403,15 +400,18 @@ export class OpenCodeService implements vscode.Disposable {
       this.sessionStatuses.set(sessionId, { type: "busy" });
       this.updateBusyPolling();
       this.emitState();
-      await client.session.command({
-        sessionID: sessionId,
-        directory,
-        command,
-        arguments: args || undefined,
-        agent: this.composer.agent || "build",
-        model: this.getCommandModel(),
-        variant,
-      }, REQUEST_OPTIONS);
+      await client.session.command(
+        {
+          sessionID: sessionId,
+          directory,
+          command,
+          arguments: args || undefined,
+          agent: this.composer.agent || "build",
+          model: this.getCommandModel(),
+          variant,
+        },
+        REQUEST_OPTIONS,
+      );
       await this.loadActiveSession(sessionId);
       return;
     }
@@ -429,14 +429,17 @@ export class OpenCodeService implements vscode.Disposable {
     this.updateBusyPolling();
     this.emitState();
 
-    await client.session.promptAsync({
-      sessionID: sessionId,
-      directory,
-      parts,
-      agent: this.composer.agent || "build",
-      model: this.getPromptModel(),
-      variant,
-    }, REQUEST_OPTIONS);
+    await client.session.promptAsync(
+      {
+        sessionID: sessionId,
+        directory,
+        parts,
+        agent: this.composer.agent || "build",
+        model: this.getPromptModel(),
+        variant,
+      },
+      REQUEST_OPTIONS,
+    );
 
     await this.loadActiveSession(sessionId);
   }
@@ -463,10 +466,12 @@ export class OpenCodeService implements vscode.Disposable {
 
   async shareSession(sessionId: string) {
     const client = await this.ensureReady();
-    const session = this.unwrap(await client.session.share({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-    }));
+    const session = this.unwrap(
+      await client.session.share({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+      }),
+    );
     this.upsertSession(session);
     this.emitState();
     return session.share?.url;
@@ -474,10 +479,12 @@ export class OpenCodeService implements vscode.Disposable {
 
   async unshareSession(sessionId: string) {
     const client = await this.ensureReady();
-    const session = this.unwrap(await client.session.unshare({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-    }));
+    const session = this.unwrap(
+      await client.session.unshare({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+      }),
+    );
     this.upsertSession(session);
     this.emitState();
   }
@@ -490,13 +497,15 @@ export class OpenCodeService implements vscode.Disposable {
       vscode.window.showInformationMessage("No message available to revert.");
       return;
     }
-    const session = this.unwrap(await client.session.revert({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-      body: {
-        messageID: target.info.id,
-      },
-    }));
+    const session = this.unwrap(
+      await client.session.revert({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+        body: {
+          messageID: target.info.id,
+        },
+      }),
+    );
     this.upsertSession(session);
     await this.loadActiveSession(sessionId);
   }
@@ -504,10 +513,12 @@ export class OpenCodeService implements vscode.Disposable {
   async unrevertSession(sessionId: string) {
     this.lastError = undefined;
     const client = await this.ensureReady();
-    const session = this.unwrap(await client.session.unrevert({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-    }));
+    const session = this.unwrap(
+      await client.session.unrevert({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+      }),
+    );
     this.upsertSession(session);
     await this.loadActiveSession(sessionId);
   }
@@ -515,10 +526,12 @@ export class OpenCodeService implements vscode.Disposable {
   async runInit(sessionId: string) {
     this.lastError = undefined;
     const client = await this.ensureReady();
-    const sessionMessages = this.unwrap(await client.session.messages({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-    }));
+    const sessionMessages = this.unwrap(
+      await client.session.messages({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+      }),
+    );
     const userMessage = [...sessionMessages].reverse().find((entry) => entry.info.role === "user");
     const model = this.getPromptModel();
 
@@ -571,9 +584,10 @@ export class OpenCodeService implements vscode.Disposable {
       vscode.window.showInformationMessage("Select some text in the active editor first.");
       return undefined;
     }
-    const range = selectionOnly && !editor.selection.isEmpty
-      ? editor.selection
-      : new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length));
+    const range =
+      selectionOnly && !editor.selection.isEmpty
+        ? editor.selection
+        : new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length));
     const text = document.getText(range);
 
     if (!text.trim()) {
@@ -654,12 +668,14 @@ export class OpenCodeService implements vscode.Disposable {
 
   private async createSessionWithTitle(titleSeed: string) {
     const client = await this.ensureReady();
-    const session = this.unwrap(await client.session.create({
-      ...REQUEST_OPTIONS,
-      body: {
-        title: this.createSessionTitle(titleSeed),
-      },
-    }));
+    const session = this.unwrap(
+      await client.session.create({
+        ...REQUEST_OPTIONS,
+        body: {
+          title: this.createSessionTitle(titleSeed),
+        },
+      }),
+    );
     this.upsertSession(session);
     return session;
   }
@@ -722,9 +738,7 @@ export class OpenCodeService implements vscode.Disposable {
   }
 
   private getAgentNames() {
-    return this.agents
-      .filter((item) => item.mode !== "primary" && !item.hidden)
-      .map((item) => item.name);
+    return this.agents.filter((item) => item.mode !== "primary" && !item.hidden).map((item) => item.name);
   }
 
   private normalizeComposerAgent(agent: string | undefined) {
@@ -785,10 +799,7 @@ export class OpenCodeService implements vscode.Disposable {
       this.stopServer();
     }
 
-    const needsReconnect =
-      !this.client ||
-      !this.sameDirectory(this.currentDirectory, directory) ||
-      forceRefresh;
+    const needsReconnect = !this.client || !this.sameDirectory(this.currentDirectory, directory) || forceRefresh;
 
     if (needsReconnect) {
       await this.connect(directory);
@@ -885,7 +896,16 @@ export class OpenCodeService implements vscode.Disposable {
 
     const v2Client = this.createV2Client(this.server?.url ?? this.getSettings().serverBaseUrl, directory);
 
-    const [sessionsResult, statusesResult, providersResult, agentsResult, commandsResult, configResult, vcsResult, projectResult] = await Promise.all([
+    const [
+      sessionsResult,
+      statusesResult,
+      providersResult,
+      agentsResult,
+      commandsResult,
+      configResult,
+      vcsResult,
+      projectResult,
+    ] = await Promise.all([
       client.session.list(REQUEST_OPTIONS),
       client.session.status(REQUEST_OPTIONS),
       v2Client.provider.list({ directory }, REQUEST_OPTIONS),
@@ -927,14 +947,14 @@ export class OpenCodeService implements vscode.Disposable {
     this.lastError = undefined;
 
     if (!this.activeSessionId) {
-      this.activeSessionId = this.getStoredActiveSessionId(this.currentDirectory)
-        ?? this.getStoredLastSessionId(this.currentDirectory)
-        ?? this.sessions[0]?.id;
+      this.activeSessionId =
+        this.getStoredActiveSessionId(this.currentDirectory) ??
+        this.getStoredLastSessionId(this.currentDirectory) ??
+        this.sessions[0]?.id;
     }
 
     if (this.activeSessionId && !this.sessions.some((item) => item.id === this.activeSessionId)) {
-      this.activeSessionId = this.getStoredLastSessionId(this.currentDirectory)
-        ?? this.sessions[0]?.id;
+      this.activeSessionId = this.getStoredLastSessionId(this.currentDirectory) ?? this.sessions[0]?.id;
     }
 
     this.persistActiveSessionId();
@@ -1095,9 +1115,10 @@ export class OpenCodeService implements vscode.Disposable {
       return undefined;
     }
 
-    const currentModel = this.composer.providerID === providerID
-      ? providerModels.find((item) => item.modelID === this.composer.modelID)
-      : undefined;
+    const currentModel =
+      this.composer.providerID === providerID
+        ? providerModels.find((item) => item.modelID === this.composer.modelID)
+        : undefined;
     if (currentModel) {
       return currentModel;
     }
@@ -1154,14 +1175,18 @@ export class OpenCodeService implements vscode.Disposable {
         ...REQUEST_OPTIONS,
         path: { id: sessionId },
       }),
-      client.session.todo({
-        ...REQUEST_OPTIONS,
-        path: { id: sessionId },
-      }).catch(() => [] as Todo[]),
-      client.session.diff({
-        ...REQUEST_OPTIONS,
-        path: { id: sessionId },
-      }).catch(() => [] as FileDiff[]),
+      client.session
+        .todo({
+          ...REQUEST_OPTIONS,
+          path: { id: sessionId },
+        })
+        .catch(() => [] as Todo[]),
+      client.session
+        .diff({
+          ...REQUEST_OPTIONS,
+          path: { id: sessionId },
+        })
+        .catch(() => [] as FileDiff[]),
     ]);
 
     this.thread = this.unwrap(messagesResult);
@@ -1479,11 +1504,7 @@ export class OpenCodeService implements vscode.Disposable {
     if (index === -1) {
       this.sessions = [session, ...this.sessions];
     } else {
-      this.sessions = [
-        ...this.sessions.slice(0, index),
-        session,
-        ...this.sessions.slice(index + 1),
-      ];
+      this.sessions = [...this.sessions.slice(0, index), session, ...this.sessions.slice(index + 1)];
     }
     this.sessions = [...this.sessions].sort((left, right) => right.time.updated - left.time.updated);
   }
@@ -1500,11 +1521,7 @@ export class OpenCodeService implements vscode.Disposable {
     }
 
     const current = this.thread[index];
-    this.thread = [
-      ...this.thread.slice(0, index),
-      { ...current, info: message },
-      ...this.thread.slice(index + 1),
-    ];
+    this.thread = [...this.thread.slice(0, index), { ...current, info: message }, ...this.thread.slice(index + 1)];
   }
 
   private upsertPart(part: Part, delta?: string) {
@@ -1543,13 +1560,10 @@ export class OpenCodeService implements vscode.Disposable {
       }
     }
 
-    const nextParts = partIndex === -1
-      ? [...message.parts, part]
-      : [
-          ...message.parts.slice(0, partIndex),
-          part,
-          ...message.parts.slice(partIndex + 1),
-        ];
+    const nextParts =
+      partIndex === -1
+        ? [...message.parts, part]
+        : [...message.parts.slice(0, partIndex), part, ...message.parts.slice(partIndex + 1)];
 
     this.thread = [
       ...this.thread.slice(0, messageIndex),
@@ -1623,9 +1637,7 @@ export class OpenCodeService implements vscode.Disposable {
         throw error;
       }
 
-      this.output.appendLine(
-        `[server] Failed to start on ${preferredPort}. Retrying on free port ${fallbackPort}.`,
-      );
+      this.output.appendLine(`[server] Failed to start on ${preferredPort}. Retrying on free port ${fallbackPort}.`);
       return await this.spawnManagedServer(targetUrl.hostname, fallbackPort, settings);
     }
   }
@@ -1635,12 +1647,7 @@ export class OpenCodeService implements vscode.Disposable {
     port: number,
     settings: ReturnType<OpenCodeService["getSettings"]>,
   ) {
-    const args = [
-      "serve",
-      `--hostname=${hostname}`,
-      `--port=${String(port)}`,
-      "--print-logs",
-    ];
+    const args = ["serve", `--hostname=${hostname}`, `--port=${String(port)}`, "--print-logs"];
 
     const env = this.buildManagedServerEnv();
     const command = await this.resolveOpencodeCommand(settings.opencodePath, env.PATH);
@@ -1939,12 +1946,13 @@ export class OpenCodeService implements vscode.Disposable {
     }
 
     const hasExt = path.extname(command).length > 0;
-    let pathExtensions = process.platform === "win32"
-      ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-        .split(";")
-        .map((item) => item.trim())
-        .filter(Boolean)
-      : [];
+    let pathExtensions =
+      process.platform === "win32"
+        ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+            .split(";")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
     if (process.platform === "win32" && !hasExt) {
       const preferredExtensions = [".CMD", ".EXE", ".BAT", ".COM"];
       pathExtensions = [
@@ -1955,9 +1963,8 @@ export class OpenCodeService implements vscode.Disposable {
 
     for (const directory of directories) {
       const base = path.join(directory, command);
-      const candidates = process.platform === "win32" && !hasExt
-        ? pathExtensions.map((ext) => `${base}${ext}`)
-        : [base];
+      const candidates =
+        process.platform === "win32" && !hasExt ? pathExtensions.map((ext) => `${base}${ext}`) : [base];
 
       for (const candidate of candidates) {
         if (await this.fileCanExecute(candidate)) {
@@ -2003,10 +2010,7 @@ export class OpenCodeService implements vscode.Disposable {
       );
 
       if (home) {
-        candidates.push(
-          path.join(home, ".local", "bin", "opencode"),
-          path.join(home, "bin", "opencode"),
-        );
+        candidates.push(path.join(home, ".local", "bin", "opencode"), path.join(home, "bin", "opencode"));
       }
     }
 
@@ -2101,7 +2105,11 @@ export class OpenCodeService implements vscode.Disposable {
       return "OpenCode CLI is not available to VS Code. Set `opencodeVisual.opencodePath` to the full path (for example `/opt/homebrew/bin/opencode` or `~/.local/bin/opencode`).";
     }
 
-    if (/econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(detail.toLowerCase())) {
+    if (
+      /econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(
+        detail.toLowerCase(),
+      )
+    ) {
       return "OpenCode server is unreachable. Check `opencodeVisual.serverBaseUrl`, then restart the local server from the command palette.";
     }
 
@@ -2229,15 +2237,12 @@ export class OpenCodeService implements vscode.Disposable {
           if (!available) {
             const npmBin = await this.getNpmGlobalBin();
             if (npmBin) {
-              const candidate = process.platform === "win32"
-                ? path.join(npmBin, "opencode.cmd")
-                : path.join(npmBin, "opencode");
+              const candidate =
+                process.platform === "win32" ? path.join(npmBin, "opencode.cmd") : path.join(npmBin, "opencode");
               if (await this.fileCanExecute(candidate)) {
-                await vscode.workspace.getConfiguration("opencodeVisual").update(
-                  "opencodePath",
-                  candidate,
-                  vscode.ConfigurationTarget.Global,
-                );
+                await vscode.workspace
+                  .getConfiguration("opencodeVisual")
+                  .update("opencodePath", candidate, vscode.ConfigurationTarget.Global);
                 this.output.appendLine(`[install] Updated opencodePath to: ${candidate}`);
                 return true;
               }
@@ -2324,8 +2329,12 @@ export class OpenCodeService implements vscode.Disposable {
 
       let stdout = "";
       let stderr = "";
-      proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
-      proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      proc.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
       const timeout = options.timeout
         ? setTimeout(() => {
@@ -2346,10 +2355,3 @@ export class OpenCodeService implements vscode.Disposable {
     });
   }
 }
-
-
-
-
-
-
-

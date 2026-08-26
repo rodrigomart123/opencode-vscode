@@ -1,7 +1,7 @@
 import { render } from "solid-js/web";
 import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { MemoryRouter, useNavigate } from "@solidjs/router";
-import { base64Encode } from "@opencode-ai/util/encode";
+import { base64Encode } from "@opencode-ai/core/util/encode";
 import { AppBaseProviders, AppInterface } from "@/app";
 import { useCommand } from "@/context/command";
 import { type ExtensionSettingKey, type ExtensionSettings, type Platform, PlatformProvider } from "@/context/platform";

@@ -28,7 +28,7 @@
       "@opencode-ai/sdk/server": ["opencode-original/packages/sdk/js/src/server.ts"],
       "@opencode-ai/sdk/v2": ["opencode-original/packages/sdk/js/src/v2/index.ts"],
       "@opencode-ai/sdk/v2/*": ["opencode-original/packages/sdk/js/src/v2/*"],
-      "@opencode-ai/util/*": ["opencode-original/packages/util/src/*"]
+      "@opencode-ai/core/util/*": ["opencode-original/packages/core/src/util/*"]
     },
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
@@ -39,6 +39,7 @@
     "webview/src/**/*.tsx",
     "webview/src/**/*.d.ts",
     "src/webviewProtocol.ts",
-    "vite.config.mts"
+    "vite.config.mts",
+    "opencode-original/packages/app/src/env.d.ts"
   ]
 }

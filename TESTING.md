@@ -1,5 +1,19 @@
 # Testing Guide for OpenCode VS Code Extension
 
+## Upstream Vendoring
+
+The sidebar webview bundles the upstream OpenCode app from `opencode-original/` (gitignored). To fetch it at the pinned commit and apply our patch queue:
+
+```bash
+npm run vendor   # = node scripts/vendor-upstream.mjs --apply-patches
+```
+
+Rules:
+
+- Never edit files inside `opencode-original/` directly. All changes go through `patches/*.patch`, applied in filename order by the vendor script.
+- To create a patch: make the edit in `opencode-original/`, then `cd opencode-original && git diff > ../patches/NNNN-name.patch && git checkout -- .`
+- To move to a newer upstream: `node scripts/vendor-upstream.mjs --ref <branch-or-sha> --apply-patches` (updates `UPSTREAM.md`).
+
 ## Quick Commands
 
 ```bash
