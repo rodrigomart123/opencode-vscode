@@ -152,7 +152,9 @@ export async function activate(context: vscode.ExtensionContext) {
   const cliAvailable = await service.ensureCliInstalled();
   if (cliAvailable) {
     void service.ensureServerReady().catch((error) => {
-      service.logOutput(`[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`);
+      service.logOutput(
+        `[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
   }
 }

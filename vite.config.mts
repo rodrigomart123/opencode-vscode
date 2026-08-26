@@ -8,7 +8,7 @@ const root = __dirname
 const upstream = path.join(root, "opencode-original")
 const app = path.join(upstream, "packages", "app", "src")
 const ui = path.join(upstream, "packages", "ui", "src")
-const util = path.join(upstream, "packages", "util", "src")
+const core = path.join(upstream, "packages", "core", "src")
 const sdk = path.join(upstream, "packages", "sdk", "js", "src")
 
 function file(...parts: string[]) {
@@ -89,17 +89,17 @@ function resolveSdk(id: string) {
   if (id === "@opencode-ai/sdk/v2/gen/client") return pick([file(sdk, "v2", "gen", "client", "index.ts")])
 }
 
-function resolveUtil(id: string) {
-  if (!id.startsWith("@opencode-ai/util/")) return
-  const rest = id.slice("@opencode-ai/util/".length)
-  return pick([file(util, `${rest}.ts`)])
+function resolveCore(id: string) {
+  if (!id.startsWith("@opencode-ai/core/")) return
+  const rest = id.slice("@opencode-ai/core/".length)
+  return pick([file(core, `${rest}.ts`), file(core, rest, "index.ts")])
 }
 
 function sourceAlias(): Plugin {
   return {
     name: "opencode-vscode:source-alias",
     resolveId(id) {
-      return resolveApp(id) ?? resolveUi(id) ?? resolveSdk(id) ?? resolveUtil(id) ?? null
+      return resolveApp(id) ?? resolveUi(id) ?? resolveSdk(id) ?? resolveCore(id) ?? null
     },
   }
 }
