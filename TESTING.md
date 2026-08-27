@@ -191,21 +191,14 @@ npm run build:extension
 
 ## CI Pipeline
 
-For GitHub Actions or similar:
+GitHub Actions runs on every pull request and on pushes to `main` (`.github/workflows/ci.yml`):
 
-```yaml
-steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-node@v4
-    with:
-      node-version: 22
-  - run: npm ci
-  - run: npm run check
-  - run: npm run test:unit
-  - run: npm run build:extension
-  # Integration tests need a display
-  # - run: xvfb-run -a npm run test:integration
-```
+1. `npm ci`
+2. `npm run vendor` - pinned upstream checkout + patch queue, cached by `UPSTREAM.md` + `patches/` hash (skipped when the vendor script is absent)
+3. `npm run check`
+4. `npm run test:unit`
+5. `npm run build` (extension + webview)
+6. Fails if committed `media/` or `dist/` artifacts differ from a fresh build - rebuild with `npm run build` and commit
 
 ## Troubleshooting
 
