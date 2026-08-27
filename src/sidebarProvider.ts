@@ -12,11 +12,7 @@ import {
   handleFetch,
   pickDirectory,
 } from "./webviewHostUtils";
-import type {
-  HostAction,
-  HostToWebviewMessage,
-  WebviewToHostMessage,
-} from "./webviewProtocol";
+import type { HostAction, HostToWebviewMessage, WebviewToHostMessage } from "./webviewProtocol";
 
 export class OpenCodeSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = "opencodeVisual.sidebar";

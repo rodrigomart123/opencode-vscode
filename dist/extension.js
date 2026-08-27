@@ -5903,12 +5903,7 @@ var OpenCodeService = class {
     }
     this.networkNoticeUntil = now + 15e3;
     const hint = this.getNetworkHint(detail);
-    void vscode.window.showWarningMessage(
-      hint,
-      "Open Settings",
-      "Restart Local Server",
-      "Show Output"
-    ).then((action) => {
+    void vscode.window.showWarningMessage(hint, "Open Settings", "Restart Local Server", "Show Output").then((action) => {
       if (action === "Open Settings") {
         void vscode.commands.executeCommand("opencodeVisual.openSettings");
         return;
@@ -6034,13 +6029,16 @@ var OpenCodeService = class {
       throw new Error("Open a workspace folder before archiving a session.");
     }
     const client3 = this.createV2Client(this.server?.url ?? this.getSettings().serverBaseUrl, directory);
-    await client3.session.update({
-      sessionID: sessionId,
-      directory,
-      time: {
-        archived: Date.now()
-      }
-    }, REQUEST_OPTIONS);
+    await client3.session.update(
+      {
+        sessionID: sessionId,
+        directory,
+        time: {
+          archived: Date.now()
+        }
+      },
+      REQUEST_OPTIONS
+    );
     await this.refreshState();
   }
   async sendPrompt(text, attachments) {
@@ -6069,15 +6067,18 @@ var OpenCodeService = class {
       this.sessionStatuses.set(sessionId, { type: "busy" });
       this.updateBusyPolling();
       this.emitState();
-      await client3.session.command({
-        sessionID: sessionId,
-        directory,
-        command,
-        arguments: args || void 0,
-        agent: this.composer.agent || "build",
-        model: this.getCommandModel(),
-        variant
-      }, REQUEST_OPTIONS);
+      await client3.session.command(
+        {
+          sessionID: sessionId,
+          directory,
+          command,
+          arguments: args || void 0,
+          agent: this.composer.agent || "build",
+          model: this.getCommandModel(),
+          variant
+        },
+        REQUEST_OPTIONS
+      );
       await this.loadActiveSession(sessionId);
       return;
     }
@@ -6092,14 +6093,17 @@ var OpenCodeService = class {
     this.sessionStatuses.set(sessionId, { type: "busy" });
     this.updateBusyPolling();
     this.emitState();
-    await client3.session.promptAsync({
-      sessionID: sessionId,
-      directory,
-      parts,
-      agent: this.composer.agent || "build",
-      model: this.getPromptModel(),
-      variant
-    }, REQUEST_OPTIONS);
+    await client3.session.promptAsync(
+      {
+        sessionID: sessionId,
+        directory,
+        parts,
+        agent: this.composer.agent || "build",
+        model: this.getPromptModel(),
+        variant
+      },
+      REQUEST_OPTIONS
+    );
     await this.loadActiveSession(sessionId);
   }
   async replyToPermission(sessionId, permissionId, response) {
@@ -6121,20 +6125,24 @@ var OpenCodeService = class {
   }
   async shareSession(sessionId) {
     const client3 = await this.ensureReady();
-    const session = this.unwrap(await client3.session.share({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId }
-    }));
+    const session = this.unwrap(
+      await client3.session.share({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId }
+      })
+    );
     this.upsertSession(session);
     this.emitState();
     return session.share?.url;
   }
   async unshareSession(sessionId) {
     const client3 = await this.ensureReady();
-    const session = this.unwrap(await client3.session.unshare({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId }
-    }));
+    const session = this.unwrap(
+      await client3.session.unshare({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId }
+      })
+    );
     this.upsertSession(session);
     this.emitState();
   }
@@ -6146,33 +6154,39 @@ var OpenCodeService = class {
       vscode.window.showInformationMessage("No message available to revert.");
       return;
     }
-    const session = this.unwrap(await client3.session.revert({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId },
-      body: {
-        messageID: target.info.id
-      }
-    }));
+    const session = this.unwrap(
+      await client3.session.revert({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId },
+        body: {
+          messageID: target.info.id
+        }
+      })
+    );
     this.upsertSession(session);
     await this.loadActiveSession(sessionId);
   }
   async unrevertSession(sessionId) {
     this.lastError = void 0;
     const client3 = await this.ensureReady();
-    const session = this.unwrap(await client3.session.unrevert({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId }
-    }));
+    const session = this.unwrap(
+      await client3.session.unrevert({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId }
+      })
+    );
     this.upsertSession(session);
     await this.loadActiveSession(sessionId);
   }
   async runInit(sessionId) {
     this.lastError = void 0;
     const client3 = await this.ensureReady();
-    const sessionMessages = this.unwrap(await client3.session.messages({
-      ...REQUEST_OPTIONS,
-      path: { id: sessionId }
-    }));
+    const sessionMessages = this.unwrap(
+      await client3.session.messages({
+        ...REQUEST_OPTIONS,
+        path: { id: sessionId }
+      })
+    );
     const userMessage = [...sessionMessages].reverse().find((entry) => entry.info.role === "user");
     const model = this.getPromptModel();
     if (!userMessage || !model) {
@@ -6287,12 +6301,14 @@ var OpenCodeService = class {
   }
   async createSessionWithTitle(titleSeed) {
     const client3 = await this.ensureReady();
-    const session = this.unwrap(await client3.session.create({
-      ...REQUEST_OPTIONS,
-      body: {
-        title: this.createSessionTitle(titleSeed)
-      }
-    }));
+    const session = this.unwrap(
+      await client3.session.create({
+        ...REQUEST_OPTIONS,
+        body: {
+          title: this.createSessionTitle(titleSeed)
+        }
+      })
+    );
     this.upsertSession(session);
     return session;
   }
@@ -6483,7 +6499,16 @@ var OpenCodeService = class {
       return;
     }
     const v2Client = this.createV2Client(this.server?.url ?? this.getSettings().serverBaseUrl, directory);
-    const [sessionsResult, statusesResult, providersResult, agentsResult, commandsResult, configResult, vcsResult, projectResult] = await Promise.all([
+    const [
+      sessionsResult,
+      statusesResult,
+      providersResult,
+      agentsResult,
+      commandsResult,
+      configResult,
+      vcsResult,
+      projectResult
+    ] = await Promise.all([
       client3.session.list(REQUEST_OPTIONS),
       client3.session.status(REQUEST_OPTIONS),
       v2Client.provider.list({ directory }, REQUEST_OPTIONS),
@@ -6986,11 +7011,7 @@ var OpenCodeService = class {
     if (index === -1) {
       this.sessions = [session, ...this.sessions];
     } else {
-      this.sessions = [
-        ...this.sessions.slice(0, index),
-        session,
-        ...this.sessions.slice(index + 1)
-      ];
+      this.sessions = [...this.sessions.slice(0, index), session, ...this.sessions.slice(index + 1)];
     }
     this.sessions = [...this.sessions].sort((left, right) => right.time.updated - left.time.updated);
   }
@@ -7004,11 +7025,7 @@ var OpenCodeService = class {
       return;
     }
     const current = this.thread[index];
-    this.thread = [
-      ...this.thread.slice(0, index),
-      { ...current, info: message },
-      ...this.thread.slice(index + 1)
-    ];
+    this.thread = [...this.thread.slice(0, index), { ...current, info: message }, ...this.thread.slice(index + 1)];
   }
   upsertPart(part, delta) {
     if (part.sessionID !== this.activeSessionId) {
@@ -7042,11 +7059,7 @@ var OpenCodeService = class {
         }
       }
     }
-    const nextParts = partIndex === -1 ? [...message.parts, part] : [
-      ...message.parts.slice(0, partIndex),
-      part,
-      ...message.parts.slice(partIndex + 1)
-    ];
+    const nextParts = partIndex === -1 ? [...message.parts, part] : [...message.parts.slice(0, partIndex), part, ...message.parts.slice(partIndex + 1)];
     this.thread = [
       ...this.thread.slice(0, messageIndex),
       { ...message, parts: nextParts },
@@ -7108,19 +7121,12 @@ var OpenCodeService = class {
       if (!fallbackPort || fallbackPort === preferredPort) {
         throw error;
       }
-      this.output.appendLine(
-        `[server] Failed to start on ${preferredPort}. Retrying on free port ${fallbackPort}.`
-      );
+      this.output.appendLine(`[server] Failed to start on ${preferredPort}. Retrying on free port ${fallbackPort}.`);
       return await this.spawnManagedServer(targetUrl.hostname, fallbackPort, settings);
     }
   }
   async spawnManagedServer(hostname, port, settings) {
-    const args = [
-      "serve",
-      `--hostname=${hostname}`,
-      `--port=${String(port)}`,
-      "--print-logs"
-    ];
+    const args = ["serve", `--hostname=${hostname}`, `--port=${String(port)}`, "--print-logs"];
     const env4 = this.buildManagedServerEnv();
     const command = await this.resolveOpencodeCommand(settings.opencodePath, env4.PATH);
     const proc = (0, import_node_child_process.spawn)(command, args, {
@@ -7418,10 +7424,7 @@ var OpenCodeService = class {
         "/var/lib/snapd/snap/bin/opencode"
       );
       if (home) {
-        candidates.push(
-          path.join(home, ".local", "bin", "opencode"),
-          path.join(home, "bin", "opencode")
-        );
+        candidates.push(path.join(home, ".local", "bin", "opencode"), path.join(home, "bin", "opencode"));
       }
     }
     for (const candidate of candidates) {
@@ -7495,7 +7498,9 @@ var OpenCodeService = class {
     if (/enoent|not found|not recognized as an internal or external command|spawn\s+.*\s+enoent/i.test(detail)) {
       return "OpenCode CLI is not available to VS Code. Set `opencodeVisual.opencodePath` to the full path (for example `/opt/homebrew/bin/opencode` or `~/.local/bin/opencode`).";
     }
-    if (/econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(detail.toLowerCase())) {
+    if (/econnrefused|econnreset|econnaborted|fetch failed|timed out|enotfound|eai_again|socket|network error/i.test(
+      detail.toLowerCase()
+    )) {
       return "OpenCode server is unreachable. Check `opencodeVisual.serverBaseUrl`, then restart the local server from the command palette.";
     }
     return "OpenCode request failed. Open extension output for diagnostics.";
@@ -7602,11 +7607,7 @@ var OpenCodeService = class {
             if (npmBin) {
               const candidate = process.platform === "win32" ? path.join(npmBin, "opencode.cmd") : path.join(npmBin, "opencode");
               if (await this.fileCanExecute(candidate)) {
-                await vscode.workspace.getConfiguration("opencodeVisual").update(
-                  "opencodePath",
-                  candidate,
-                  vscode.ConfigurationTarget.Global
-                );
+                await vscode.workspace.getConfiguration("opencodeVisual").update("opencodePath", candidate, vscode.ConfigurationTarget.Global);
                 this.output.appendLine(`[install] Updated opencodePath to: ${candidate}`);
                 return true;
               }
@@ -7704,15 +7705,9 @@ var vscode4 = __toESM(require("vscode"));
 
 // src/webviewHtml.ts
 var vscode2 = __toESM(require("vscode"));
-function createNonce() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let value = "";
-  for (let index = 0; index < 32; index += 1) {
-    value += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return value;
-}
-var themePreload = `;(function () {
+
+// src/preloadScripts.ts
+var themePreload = String.raw`;(function () {
   function setItem(key, value) {
     try {
       localStorage.setItem(key, value)
@@ -7760,6 +7755,14 @@ var themePreload = `;(function () {
     } catch {}
   }
 
+  function djb2(value) {
+    var hash = 5381
+    for (var index = 0; index < value.length; index += 1) {
+      hash = ((hash << 5) + hash + value.charCodeAt(index)) >>> 0
+    }
+    return String(hash)
+  }
+
   function base64UrlEncode(value) {
     try {
       var bytes = new TextEncoder().encode(value)
@@ -7767,7 +7770,7 @@ var themePreload = `;(function () {
       for (var index = 0; index < bytes.length; index += 1) {
         binary += String.fromCharCode(bytes[index])
       }
-      return btoa(binary).replace(/+/g, "-").replace(///g, "_").replace(/=/g, "")
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
     } catch {
       return ""
     }
@@ -7776,6 +7779,19 @@ var themePreload = `;(function () {
   var cfg = window.__OPENCODE_VSCODE_CONFIG__ || {}
   var nativeSettings = cfg.nativeSettings && typeof cfg.nativeSettings === "object" ? cfg.nativeSettings : null
   var hasNativeScheme = false
+
+  if (nativeSettings) {
+    // Only push VS Code-owned settings when they differ from the last render.
+    // Without this guard every reload reverted changes the user made in-app
+    // (the "provider/model management bugs" class): the app persists its own
+    // choices to the same localStorage keys this block force-overwrites.
+    var signatureHash = djb2(JSON.stringify(nativeSettings))
+    if (getItem("opencode.vscode.nativeSignature") === signatureHash) {
+      nativeSettings = null
+    } else {
+      setItem("opencode.vscode.nativeSignature", signatureHash)
+    }
+  }
 
   if (nativeSettings) {
     if (typeof nativeSettings.themeId === "string" && nativeSettings.themeId) {
@@ -7935,7 +7951,7 @@ var themePreload = `;(function () {
     document.head.appendChild(style)
   }
 })()`;
-var storagePreload = `;(function () {
+var storagePreload = String.raw`;(function () {
   function allow(key) {
     return key === "settings.v3" || key.indexOf("opencode.global.dat:") === 0 || key.indexOf("opencode.settings.dat:") === 0 || key.indexOf("opencode-theme-") === 0
   }
@@ -8028,6 +8044,16 @@ var storagePreload = `;(function () {
     emit(message.key, message.value)
   })
 })()`;
+
+// src/webviewHtml.ts
+function createNonce() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let value = "";
+  for (let index = 0; index < 32; index += 1) {
+    value += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return value;
+}
 function getWebviewHtml(webview, extensionUri, config) {
   const nonce = createNonce();
   const scriptUri = webview.asWebviewUri(vscode2.Uri.joinPath(extensionUri, "media", "app", "app.js"));
@@ -8093,12 +8119,7 @@ function getWebviewHtml(webview, extensionUri, config) {
 }
 
 // src/storageBridge.ts
-var shared = [
-  "settings.v3",
-  "opencode.global.dat:",
-  "opencode.settings.dat:",
-  "opencode-theme-"
-];
+var shared = ["settings.v3", "opencode.global.dat:", "opencode.settings.dat:", "opencode-theme-"];
 function sharedKey(key) {
   return shared.some((item) => item.endsWith(":") ? key.startsWith(item) : key.startsWith(item));
 }
@@ -9052,7 +9073,9 @@ async function activate(context) {
   const cliAvailable = await service.ensureCliInstalled();
   if (cliAvailable) {
     void service.ensureServerReady().catch((error) => {
-      service.logOutput(`[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`);
+      service.logOutput(
+        `[activate] Server readiness check failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     });
   }
 }

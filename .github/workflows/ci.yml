@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The webview bundles the upstream OpenCode app (gitignored). Cache the
+      # vendored checkout + its deps; the vendor script resets the tree to the
+      # pinned sha before re-applying the patch queue, so cache hits are safe.
+      - name: Restore vendored upstream cache
+        if: ${{ hashFiles('scripts/vendor-upstream.mjs') != '' }}
+        uses: actions/cache@v4
+        with:
+          path: opencode-original
+          key: vendor-${{ runner.os }}-${{ hashFiles('UPSTREAM.md', 'patches/*.patch') }}
+          restore-keys: |
+            vendor-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Vendor upstream webview app
+        if: ${{ hashFiles('scripts/vendor-upstream.mjs') != '' }}
+        run: npm run vendor
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build extension and webview
+        run: npm run build
+
+      # Catch PRs that change sources but forget to rebuild the committed
+      # webview/extension artifacts.
+      - name: Verify committed artifacts are in sync with source
+        run: |
+          git diff --exit-code -- media dist || {
+            echo "::error::Committed media/ or dist/ artifacts are out of date. Run 'npm run build' and commit the regenerated files."
+            exit 1
+          }

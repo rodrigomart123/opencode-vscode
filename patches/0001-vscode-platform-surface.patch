@@ -1,0 +1,47 @@
+diff --git a/packages/app/src/context/platform.tsx b/packages/app/src/context/platform.tsx
+index fd89bf51b..dda8b46cc 100644
+--- a/packages/app/src/context/platform.tsx
++++ b/packages/app/src/context/platform.tsx
+@@ -9,6 +9,20 @@ type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: stri
+ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+ type UpdateInfo = { updateAvailable: boolean; version?: string }
+ 
++/** VS Code extension settings exposed to the app (mirror of src/webviewProtocol.ts). */
++export type ExtensionSettingKey =
++  | "opencodePath"
++  | "serverBaseUrl"
++  | "autoStartServer"
++  | "debugServerLogs"
++
++export type ExtensionSettings = {
++  opencodePath: string
++  serverBaseUrl: string
++  autoStartServer: boolean
++  debugServerLogs: boolean
++}
++
+ export type Platform = {
+   /** Platform discriminator */
+   platform: "web" | "desktop"
+@@ -84,6 +98,21 @@ export type Platform = {
+ 
+   /** Check if an editor app exists (desktop only) */
+   checkAppExists?(appName: string): Promise<boolean>
++  /** Open a before/after diff in the editor (VS Code extension) */
++  openDiff?(input: { filePath: string; before: string; after: string }): Promise<void>
++
++  /** Open the extension settings UI (VS Code extension) */
++  openSettings?(): Promise<void>
++
++  /** Read extension settings (VS Code extension) */
++  getExtensionSettings?(): Promise<ExtensionSettings | null>
++
++  /** Write one extension setting (VS Code extension) */
++  setExtensionSetting?(key: ExtensionSettingKey, value: string | boolean): Promise<ExtensionSettings | null>
++
++  /** Restart the managed OpenCode server process (VS Code extension) */
++  restartServerProcess?(): Promise<void>
++
+ 
+   /** Read image from clipboard (desktop only) */
+   readClipboardImage?(): Promise<File | null>

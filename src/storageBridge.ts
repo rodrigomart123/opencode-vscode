@@ -1,11 +1,6 @@
 import type { HostToWebviewMessage, WebviewToHostMessage } from "./webviewProtocol";
 
-const shared = [
-  "settings.v3",
-  "opencode.global.dat:",
-  "opencode.settings.dat:",
-  "opencode-theme-",
-] as const;
+const shared = ["settings.v3", "opencode.global.dat:", "opencode.settings.dat:", "opencode-theme-"] as const;
 
 function sharedKey(key: string) {
   return shared.some((item) => (item.endsWith(":") ? key.startsWith(item) : key.startsWith(item)));

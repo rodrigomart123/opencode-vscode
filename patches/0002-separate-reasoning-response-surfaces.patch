@@ -1,0 +1,26 @@
+diff --git a/packages/ui/src/components/message-part.css b/packages/ui/src/components/message-part.css
+index 0dd02d812..4bbca33a2 100644
+--- a/packages/ui/src/components/message-part.css
++++ b/packages/ui/src/components/message-part.css
+@@ -210,6 +210,10 @@
+ [data-component="text-part"] {
+   width: 100%;
+   margin-top: 24px;
++  padding: 12px 14px;
++  background-color: var(--surface-base);
++  border: 1px solid var(--border-weak-base);
++  border-radius: 6px;
+ 
+   [data-slot="text-part-body"] {
+     margin-top: 0;
+@@ -279,6 +283,10 @@
+ 
+ [data-component="reasoning-part"] {
+   width: 100%;
++  padding: 12px 14px;
++  background-color: var(--surface-weak);
++  border: 1px solid var(--border-weak-base);
++  border-radius: 6px;
+   color: var(--text-base);
+   line-height: var(--line-height-normal);
+ 
